@@ -8,7 +8,6 @@ Install Required Libraries:
 pip install pygame numpy pandas tensorflow matplotlib
 
 Download the Code:
-Save each code block into separate .py files as indicated:
 
 snake_game.py
 snake_game_data_collection.py
