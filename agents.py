@@ -2,6 +2,8 @@ import random
 import heapq
 from collections import deque
 
+from snake_game import GRID_HEIGHT, GRID_WIDTH
+
 
 UP = (0, -1)
 DOWN = (0, 1)
@@ -157,36 +159,71 @@ class DefensiveAgent(Agent):
         return random.choice(list(safe_moves.keys())) if safe_moves else random.choice(list(valid_moves.keys()))
 
 class WallAvoidanceAgent(Agent):
-    """An agent that avoids moving towards walls."""
+    """An agent that avoids moving towards walls while maintaining a buffer distance."""
+    def __init__(self, buffer_distance=3):
+        self.buffer_distance = buffer_distance  # Set the buffer distance to keep away from the walls
+
     def choose_action(self, game_state):
         snake_head = None
+        food = None
         for y, row in enumerate(game_state):
             for x, cell in enumerate(row):
-                if cell == 1 and not snake_head:  # Snake head
+                if cell == 1 and not snake_head:
                     snake_head = (x, y)
+                elif cell == 2:
+                    food = (x, y)
 
         valid_moves = get_valid_moves(game_state, snake_head)
+
+        # Debug: Print the valid moves to see what's available
+        print(f"Valid moves: {valid_moves}")
 
         # Avoid moves that lead closer to walls but also seek new routes
         def distance_from_wall(position):
             x, y = position
             return min(x, len(game_state[0]) - x - 1, y, len(game_state) - y - 1)
-
+        
+        # Check if a move goes out of bounds or gets too close to a wall
+        def is_safe_move(position):
+            x, y = position
+            return distance_from_wall(position) >= self.buffer_distance
+    
         best_move = None
-        best_distance = -1
+        best_score = float('-inf')
+
         for action, pos in valid_moves.items():
-            dist = distance_from_wall(pos)
-            if dist > best_distance:
+            if not is_safe_move(pos):  # Ignore moves that bring the snake too close to the wall
+                continue
+
+            food_distance = abs(food[0] - pos[0]) + abs(food[1] - pos[1]) if food else 0
+
+            # Favor moves that bring the snake closer to food while avoiding walls
+            score = -food_distance  # Negative so the agent moves closer to food
+
+            if score > best_score or (score == best_score and random.random() < 0.5):
                 best_move = action
-                best_distance = dist
+                best_score = score
 
-        # Avoid situations where the snake continues in a loop
-        # Re-evaluate position based on additional factors, such as food position
-        if not best_move:
-            best_move = random.choice(list(valid_moves.keys()))
+        # If no valid moves were safe, fallback to a random valid move
+        if best_move is None:
+            # Try to fallback to random but make sure it's a safe move
+            for action, pos in valid_moves.items():
+                if is_safe_move(pos):
+                    best_move = action
+                    break
 
-        return best_move
+        return best_move if best_move else random.choice(list(valid_moves.keys()))
 
+    def get_current_direction(self, game_state, snake_head):
+        """Get the current direction the snake is facing based on its head position and the direction it moved."""
+        head_x, head_y = snake_head
+        direction = game_state.get_direction()
+        return direction
+    
+def valid_move(position, game_state):
+    """Check if a move is valid (inside grid and not colliding with body)."""
+    x, y = position
+    return (0 <= x < GRID_WIDTH) and (0 <= y < GRID_HEIGHT) and game_state[y][x] != 1
 
 def get_valid_moves(game_state, snake_head):
     """
