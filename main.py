@@ -71,14 +71,15 @@ def main():
             # Handle human input
             keys = pygame.key.get_pressed()
             if keys[pygame.K_UP]:
-                game.step(UP)
+                game.change_direction(UP)
             elif keys[pygame.K_DOWN]:
-                game.step(DOWN)
+                game.change_direction(DOWN)
             elif keys[pygame.K_LEFT]:
-                game.step(LEFT)
+                game.change_direction(LEFT)
             elif keys[pygame.K_RIGHT]:
-                game.step(RIGHT)
-        else:
+                game.change_direction(RIGHT)
+
+        elif agent:
             # Get the current game state as a 2D grid
             state = GameState(game).get_grid()
 
@@ -86,7 +87,10 @@ def main():
             action = agent.choose_action(state)
 
             # Apply the agent's action
-            game.step(action)
+            game.change_direction(action)
+
+        # Move the snake in the current direction
+        game.step(game.direction)
 
         # Draw the game
         draw_game(screen, game)
@@ -100,3 +104,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
