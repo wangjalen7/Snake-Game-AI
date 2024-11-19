@@ -94,9 +94,9 @@ class SnakeGame:
     
     def get_reward(self):
         """Return the reward for the current state."""
-        if self.is_collision():
-            return -10  # Penalty for collision
-        elif self.snake_eats_food():
+        if self.is_game_over():
+            return -15  # Penalty for collision
+        elif self.get_food() == self.get_snake:
             return 25   # Reward for eating food
         else:
             return 0   # Neutral reward for other moves

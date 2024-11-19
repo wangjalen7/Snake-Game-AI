@@ -59,15 +59,16 @@ def main():
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     clock = pygame.time.Clock()
 
-    # Initialize the game
-    game = SnakeGame()
-
     # Initialize the selected agent
     agent_class = AGENTS[args.agent]
     agent = agent_class() if agent_class else None
 
+    # If QLearning agent, train it before starting the game
     if args.agent == "qlearning":
         train_qlearning(agent)  # Train the Q-learning agent before starting the game
+
+    # Initialize the game
+    game = SnakeGame()
 
     while not game.is_game_over():
         for event in pygame.event.get():
@@ -110,46 +111,31 @@ def main():
     pygame.quit()
 
 # Train the Q-learning agent
-def train_qlearning(agent, num_episodes=250000):
-    for episode in range(num_episodes):
-        game = SnakeGame()
-        old_distance = None
+def train_qlearning(agent):
+    episodes = 10000
+    for episode in range(episodes):
+        game = SnakeGame()  # Reset the game for each episode
+        state = GameState(game).get_grid()
 
         while not game.is_game_over():
-            # Current state
-            state = GameState(game).get_grid()
-            snake_head = game.get_snake()[0]
-            food_x, food_y = game.get_food()
-            old_distance = abs(food_x - snake_head[0]) + abs(food_y - snake_head[1])
-
-            # Choose an action
             action = agent.choose_action(state)
-            game.change_direction(action)
-            game.step(game.direction)
+            previous_state = state
 
-            # Next state
-            next_state = GameState(game).get_grid()
-            new_distance = abs(food_x - snake_head[0]) + abs(food_y - snake_head[1])
+            game.step(action)
+            state = GameState(game).get_grid()
+            reward = game.get_reward()
 
-            # Define reward
-            if game.is_game_over():
-                reward = -50
-            elif snake_head == (food_x, food_y):
-                reward = 100
-            else:
-                reward = 10 if new_distance < old_distance else -1
+            agent.learn(previous_state, action, reward, state, game.get_food(), game.is_game_over())
 
-            # Update Q-values
-            agent.update_q_value(state, action, reward, next_state)
+            # draw_game(screen, game)
+            # clock.tick(FPS)
 
-        # Log progress
-        if episode % 100 == 0:
-            print(f"Episode {episode}/{num_episodes} completed. Epsilon: {agent.epsilon:.2f}. Score: {game.score}")
+        agent.decay_exploration()
 
-        # Decay epsilon
-        agent.epsilon = max(0.01, agent.epsilon * 0.995)
+        print(f"Episode {episode + 1}/{episodes} completed. Exploration rate: {agent.exploration_rate:.4f}. Score: {game.score}")
 
-
+    print("Training completed.")
+    # pygame.quit()
 
 if __name__ == "__main__":
     main()

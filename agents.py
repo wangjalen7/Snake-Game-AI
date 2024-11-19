@@ -177,7 +177,7 @@ class WallAvoidanceAgent(Agent):
         valid_moves = get_valid_moves(game_state, snake_head)
 
         # Debug: Print the valid moves to see what's available
-        print(f"Valid moves: {valid_moves}")
+        # print(f"Valid moves: {valid_moves}")
 
         # Avoid moves that lead closer to walls but also seek new routes
         def distance_from_wall(position):
@@ -220,47 +220,76 @@ class WallAvoidanceAgent(Agent):
         head_x, head_y = snake_head
         direction = game_state.get_direction()
         return direction
-    
+
 class QLearningAgent:
-    def __init__(self, alpha=0.1, gamma=0.9, epsilon=0.1):
-        self.alpha = alpha  # Learning rate
-        self.gamma = gamma  # Discount factor
-        self.epsilon = epsilon  # Exploration rate
-        self.q_table = {}  # Q-table to store Q-values for state-action pairs
+    """An agent that learns using the Q-learning algorithm."""
+
+    def __init__(self, learning_rate=0.1, discount_factor=0.9, exploration_rate=1.0, exploration_decay=0.995):
+        self.q_table = defaultdict(lambda: {UP: 0, DOWN: 0, LEFT: 0, RIGHT: 0})
+        self.learning_rate = learning_rate
+        self.discount_factor = discount_factor
+        self.exploration_rate = exploration_rate
+        self.exploration_decay = exploration_decay
+        self.min_exploration_rate = 0.01
 
     def choose_action(self, state):
-        """Choose an action based on epsilon-greedy policy."""
-        if random.uniform(0, 1) < self.epsilon:
-            # Exploration: choose a random action
+        """Choose an action using epsilon-greedy strategy."""
+        state_key = self._state_to_key(state)
+        if random.random() < self.exploration_rate:
             return random.choice([UP, DOWN, LEFT, RIGHT])
         else:
-            # Exploitation: choose the action with the highest Q-value for the current state
-            state_key = self.get_state_key(state)
-            if state_key not in self.q_table:
-                self.q_table[state_key] = {UP: 0, DOWN: 0, LEFT: 0, RIGHT: 0}
-            q_values = self.q_table[state_key]
-            return max(q_values, key=q_values.get)
+            return max(self.q_table[state_key], key=self.q_table[state_key].get)
 
-    def update_q_value(self, state, action, reward, next_state):
-        """Update the Q-value for a given state-action pair."""
-        state_key = self.get_state_key(state)
-        next_state_key = self.get_state_key(next_state)
+    def learn(self, state, action, reward, next_state, food_position, game_over):
+        """Update the Q-table based on the action taken and the reward received."""
+        # Update the reward based on the custom reward function
+        custom_reward = self.get_reward(state, state[0], food_position, game_over)
 
-        if state_key not in self.q_table:
-            self.q_table[state_key] = {UP: 0, DOWN: 0, LEFT: 0, RIGHT: 0}
-        if next_state_key not in self.q_table:
-            self.q_table[next_state_key] = {UP: 0, DOWN: 0, LEFT: 0, RIGHT: 0}
+        # Update Q-values with the custom reward
+        state_key = self._state_to_key(state)
+        next_state_key = self._state_to_key(next_state)
 
-        # Q-value update formula
-        old_q_value = self.q_table[state_key][action]
-        future_q_value = max(self.q_table[next_state_key].values())  # Max Q-value for next state
-        new_q_value = old_q_value + self.alpha * (reward + self.gamma * future_q_value - old_q_value)
+        # Q-value update logic
+        best_next_action = max(self.q_table[next_state_key], key=self.q_table[next_state_key].get)
+        target = custom_reward + self.discount_factor * self.q_table[next_state_key][best_next_action]
+        self.q_table[state_key][action] += self.learning_rate * (target - self.q_table[state_key][action])
 
-        self.q_table[state_key][action] = new_q_value
+        # Decay the exploration rate
+        self.decay_exploration()
 
-    def get_state_key(self, state):
-        """Convert a game state (2D grid) into a hashable state key."""
-        return tuple(tuple(row) for row in state)  # Convert grid to a tuple of tuples for immutability
+
+    def decay_exploration(self):
+        """Decay the exploration rate over time."""
+        self.exploration_rate = max(self.min_exploration_rate, self.exploration_rate * self.exploration_decay)
+
+    def get_reward(self, game_state, snake_head, food_position, game_over):
+        """Define a custom reward function based on the game state."""
+        reward = 0
+
+        if game_over:
+            reward = -100  # Big negative reward for game over (death)
+        else:
+            # Reward for eating food
+            if snake_head == food_position:
+                reward = 10  # Positive reward for eating food
+            else:
+                # Penalize for moving towards walls (getting closer to boundaries)
+                distance_from_wall = min(snake_head[0], GRID_WIDTH - 1 - snake_head[0], snake_head[1], GRID_HEIGHT - 1 - snake_head[1])
+                if distance_from_wall < 3:  # If snake is too close to the wall
+                    reward -= 1  # Small negative reward for being close to walls
+
+                # Reward for moving closer to food
+                food_distance_before = abs(snake_head[0] - food_position[0]) + abs(snake_head[1] - food_position[1])
+                food_distance_after = abs(snake_head[0] - food_position[0]) + abs(snake_head[1] - food_position[1])
+                if food_distance_after < food_distance_before:
+                    reward += 1  # Reward for getting closer to food
+
+        return reward
+
+    @staticmethod
+    def _state_to_key(state):
+        """Convert the 2D grid state into a hashable key for the Q-table."""
+        return tuple(map(tuple, state))
     
 def valid_move(position, game_state):
     """Check if a move is valid (inside grid and not colliding with body)."""
