@@ -37,34 +37,5 @@ After training, plots of scores, survival times, losses, and epsilon values will
 Test the Trained Agent:
 To test the agent without further training, modify snake_rl.py to load the saved model and run test episodes.
 
-agent.model = tf.keras.models.load_model('snake_dqn_model.h5')
-agent.update_target_model()
-
-
-agent.epsilon = 0
-
-def test_agent(agent, game, episodes=5):
-    for e in range(episodes):
-        state = game.reset()
-        done = False
-        score = 0
-        steps = 0
-        while not done:
-            game.render()
-            action = agent.act(state)
-            state, reward, done, score = game.step(action)
-            steps += 1
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    pygame.quit()
-                    sys.exit()
-        print(f"Test Episode {e+1}/{episodes}, Score: {score}, Steps: {steps}")
-        pygame.time.delay(1000)  # Pause between episodes
-
-    pygame.quit()
-
-test_agent(agent, game)
-
-
 Run the script again to observe the agent's performance.
 
