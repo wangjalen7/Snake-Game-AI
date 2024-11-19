@@ -91,3 +91,12 @@ class SnakeGame:
     def get_max_score(self):
         """Return the maximum score at any tick."""
         return self.max_score
+    
+    def get_reward(self):
+        """Return the reward for the current state."""
+        if self.is_collision():
+            return -10  # Penalty for collision
+        elif self.snake_eats_food():
+            return 25   # Reward for eating food
+        else:
+            return 0   # Neutral reward for other moves

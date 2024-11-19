@@ -1,6 +1,7 @@
 import random
+import numpy as np
 import heapq
-from collections import deque
+from collections import defaultdict, deque
 
 from snake_game import GRID_HEIGHT, GRID_WIDTH
 
@@ -219,6 +220,47 @@ class WallAvoidanceAgent(Agent):
         head_x, head_y = snake_head
         direction = game_state.get_direction()
         return direction
+    
+class QLearningAgent:
+    def __init__(self, alpha=0.1, gamma=0.9, epsilon=0.1):
+        self.alpha = alpha  # Learning rate
+        self.gamma = gamma  # Discount factor
+        self.epsilon = epsilon  # Exploration rate
+        self.q_table = {}  # Q-table to store Q-values for state-action pairs
+
+    def choose_action(self, state):
+        """Choose an action based on epsilon-greedy policy."""
+        if random.uniform(0, 1) < self.epsilon:
+            # Exploration: choose a random action
+            return random.choice([UP, DOWN, LEFT, RIGHT])
+        else:
+            # Exploitation: choose the action with the highest Q-value for the current state
+            state_key = self.get_state_key(state)
+            if state_key not in self.q_table:
+                self.q_table[state_key] = {UP: 0, DOWN: 0, LEFT: 0, RIGHT: 0}
+            q_values = self.q_table[state_key]
+            return max(q_values, key=q_values.get)
+
+    def update_q_value(self, state, action, reward, next_state):
+        """Update the Q-value for a given state-action pair."""
+        state_key = self.get_state_key(state)
+        next_state_key = self.get_state_key(next_state)
+
+        if state_key not in self.q_table:
+            self.q_table[state_key] = {UP: 0, DOWN: 0, LEFT: 0, RIGHT: 0}
+        if next_state_key not in self.q_table:
+            self.q_table[next_state_key] = {UP: 0, DOWN: 0, LEFT: 0, RIGHT: 0}
+
+        # Q-value update formula
+        old_q_value = self.q_table[state_key][action]
+        future_q_value = max(self.q_table[next_state_key].values())  # Max Q-value for next state
+        new_q_value = old_q_value + self.alpha * (reward + self.gamma * future_q_value - old_q_value)
+
+        self.q_table[state_key][action] = new_q_value
+
+    def get_state_key(self, state):
+        """Convert a game state (2D grid) into a hashable state key."""
+        return tuple(tuple(row) for row in state)  # Convert grid to a tuple of tuples for immutability
     
 def valid_move(position, game_state):
     """Check if a move is valid (inside grid and not colliding with body)."""
