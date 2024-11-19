@@ -1,8 +1,10 @@
-# snake_game.py
+# snake_game_data_collection.py
 
 import pygame
 import random
 import sys
+import numpy as np
+import pandas as pd
 
 # Initialize Pygame
 pygame.init()
@@ -28,10 +30,19 @@ UP = (0, -1)
 DOWN = (0, 1)
 LEFT = (-1, 0)
 RIGHT = (1, 0)
+DIRECTIONS = [UP, DOWN, LEFT, RIGHT]
+
+# Direction Labels
+DIR_LABELS = {
+    UP: 0,
+    DOWN: 1,
+    LEFT: 2,
+    RIGHT: 3
+}
 
 # Set up the display
 screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
-pygame.display.set_caption('Snake Game')
+pygame.display.set_caption('Snake Game Data Collection')
 
 # Set up the clock
 clock = pygame.time.Clock()
@@ -49,44 +60,52 @@ def draw_grid():
     for y in range(0, WINDOW_HEIGHT, CELL_SIZE):
         pygame.draw.line(screen, GRAY, (0, y), (WINDOW_WIDTH, y))
 
+def initialize_board():
+    board = np.zeros((GRID_HEIGHT, GRID_WIDTH), dtype=int)
+    return board
+
+def update_board(board, snake, pellet):
+    board.fill(0)
+    for segment in snake[1:]:
+        board[segment[1], segment[0]] = 2  # Snake body
+    head = snake[0]
+    board[head[1], head[0]] = 1  # Snake head
+    board[pellet[1], pellet[0]] = 3  # Pellet
+    # Borders can be added if needed
+    return board
+
 def main():
     # Game Variables
     snake = [(GRID_WIDTH // 2, GRID_HEIGHT // 2)]
-    direction = RIGHT
+    direction = random.choice(DIRECTIONS)
     pellet = (random.randint(0, GRID_WIDTH - 1), random.randint(0, GRID_HEIGHT - 1))
     score = 0
     speed = 10  # Game speed in frames per second
+    max_steps = 1000  # Maximum steps per game to prevent infinite loops
+
+    # Initialize the board
+    board = initialize_board()
+
+    # Data collection variables
+    data = []
 
     running = True
-    while running:
+    steps = 0
+    while running and steps < max_steps:
         clock.tick(speed)
         screen.fill(BLACK)
         draw_grid()
 
-        # Event Handling
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-                break
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_UP and direction != DOWN:
-                    direction = UP
-                elif event.key == pygame.K_DOWN and direction != UP:
-                    direction = DOWN
-                elif event.key == pygame.K_LEFT and direction != RIGHT:
-                    direction = LEFT
-                elif event.key == pygame.K_RIGHT and direction != LEFT:
-                    direction = RIGHT
-
-        if not running:
-            break
+        # Autonomous movement: Random direction
+        direction = random.choice(DIRECTIONS)
 
         # Move Snake
-        new_head = ((snake[0][0] + direction[0]) % GRID_WIDTH, (snake[0][1] + direction[1]) % GRID_HEIGHT)
+        new_head = ((snake[0][0] + direction[0]) % GRID_WIDTH,
+                    (snake[0][1] + direction[1]) % GRID_HEIGHT)
 
         # Collision Detection
         if new_head in snake:
-            print("Game Over! You collided with yourself.")
+            # Game Over
             running = False
             continue
 
@@ -103,6 +122,14 @@ def main():
         else:
             snake.pop()  # Remove last segment
 
+        # Update the board
+        board = update_board(board, snake, pellet)
+
+        # Collect data
+        state = board.copy()
+        action = DIR_LABELS[direction]
+        data.append({'state': state, 'action': action})
+
         # Draw Snake
         for segment in snake:
             draw_cell(segment, GREEN)
@@ -116,8 +143,30 @@ def main():
 
         pygame.display.flip()
 
+        steps += 1
+
+    # Save data to CSV
+    save_data_to_csv(data)
+
     pygame.quit()
     sys.exit()
+
+def save_data_to_csv(data):
+    # Flatten the state arrays and prepare the data for saving
+    records = []
+    for entry in data:
+        flat_state = entry['state'].flatten()
+        record = flat_state.tolist()
+        record.append(entry['action'])
+        records.append(record)
+
+    # Create a DataFrame
+    columns = [f'cell_{i}' for i in range(GRID_WIDTH * GRID_HEIGHT)] + ['action']
+    df = pd.DataFrame(records, columns=columns)
+
+    # Save to CSV
+    df.to_csv('snake_game_data.csv', index=False)
+    print("Data saved to snake_game_data.csv")
 
 if __name__ == "__main__":
     main()
