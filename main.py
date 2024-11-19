@@ -3,7 +3,7 @@ import sys
 import argparse
 from snake_game import SnakeGame, LEFT, DOWN, UP, RIGHT, GRID_WIDTH, GRID_HEIGHT
 from game_state import GameState
-from agents import RandomAgent, GreedyAgent
+from agents import RandomAgent, GreedyAgent, WallAvoidanceAgent, PathfindingAgent, AStarAgent, DefensiveAgent
 
 # Constants for rendering
 GRID_SIZE = 20
@@ -20,7 +20,11 @@ RED = (255, 0, 0)
 AGENTS = {
     "human": None,  # Human-controlled play
     "random": RandomAgent,
-    "greedy": GreedyAgent
+    "greedy": GreedyAgent,
+    "pathfinding": PathfindingAgent,
+    "wall_avoidance": WallAvoidanceAgent,
+    "a_star": AStarAgent,
+    "defensive": DefensiveAgent,
 }
 
 
