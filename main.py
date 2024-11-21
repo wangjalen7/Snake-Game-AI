@@ -90,7 +90,7 @@ def main():
 
         elif agent:
             # Get the current game state as a 2D grid
-            state = GameState(game).get_grid()
+            state = GameState(game)
 
             # Agent chooses an action
             action = agent.choose_action(state)

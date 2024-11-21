@@ -32,9 +32,10 @@ class RandomAgent(Agent):
 class GreedyAgent(Agent):
     """An agent that moves towards the food greedily while avoiding collisions."""
     def choose_action(self, game_state):
+        grid = game_state.get_grid()  # Get the grid representation
         snake_head = None
         food = None
-        for y, row in enumerate(game_state):
+        for y, row in enumerate(grid):
             for x, cell in enumerate(row):
                 if cell == 1 and not snake_head:  # Snake head
                     snake_head = (x, y)
@@ -65,9 +66,10 @@ class GreedyAgent(Agent):
 class PathfindingAgent(Agent):
     """An agent that uses BFS to find the shortest path to food."""
     def choose_action(self, game_state):
+        grid = game_state.get_grid()
         snake_head = None
         food = None
-        for y, row in enumerate(game_state):
+        for y, row in enumerate(grid):
             for x, cell in enumerate(row):
                 if cell == 1 and not snake_head:
                     snake_head = (x, y)
@@ -99,45 +101,88 @@ class PathfindingAgent(Agent):
 
 class AStarAgent(Agent):
     """An agent that uses A* search to move towards the food."""
-    def choose_action(self, game_state):
-        snake_head = None
-        food = None
-        for y, row in enumerate(game_state):
-            for x, cell in enumerate(row):
-                if cell == 1 and not snake_head:
-                    snake_head = (x, y)
-                elif cell == 2:
-                    food = (x, y)
+
+    def choose_action(self, state):
+        snake_body = state.get_snake_body()
+        snake_head = snake_body[0]
+        food = state.get_food()
 
         if not snake_head or not food:
             return random.choice([UP, DOWN, LEFT, RIGHT])
 
-        # A* search
         open_set = []
-        heapq.heappush(open_set, (0, snake_head, []))  # (priority, position, path)
+        initial_body = snake_body.copy()
+        initial_path = []
+        heapq.heappush(open_set, (0, snake_head, initial_body, initial_path))
         visited = set()
 
-        def heuristic(pos):
-            return abs(pos[0] - food[0]) + abs(pos[1] - food[1])  # Manhattan distance
+        actions = [UP, DOWN, LEFT, RIGHT]
 
         while open_set:
-            _, position, path = heapq.heappop(open_set)
+            priority, position, body, path = heapq.heappop(open_set)
 
-            if position in visited:
+            state_key = (position, tuple(body))
+            if state_key in visited:
                 continue
-            visited.add(position)
+            visited.add(state_key)
 
             if position == food:
-                return path[0] if path else random.choice([UP, DOWN, LEFT, RIGHT])
+                return path[0] if path else random.choice(actions)
 
-            for action, next_pos in get_valid_moves(game_state, position).items():
-                if next_pos not in visited:
-                    priority = len(path) + 1 + heuristic(next_pos)
-                    heapq.heappush(open_set, (priority, next_pos, path + [action]))
+            for action in actions:
+                dx, dy = action
+                new_head = (position[0] + dx, position[1] + dy)
+
+                # Check for wall collision
+                if not (0 <= new_head[0] < GRID_WIDTH and 0 <= new_head[1] < GRID_HEIGHT):
+                    continue
+
+                # Check for body collision
+                if new_head in body:
+                    continue
+
+                food_eaten = new_head == food
+
+                if food_eaten:
+                    # Snake grows
+                    new_body = [new_head] + body
+                else:
+                    # Snake moves, tail moves forward
+                    new_body = [new_head] + body[:-1]
+
+                # No safety check here; we proceed to explore this path
+                new_path = path + [action]
+                priority = len(new_path) + self.heuristic(new_head, food)
+                heapq.heappush(open_set, (priority, new_head, new_body, new_path))
 
         # If no path found, fallback to a random valid move
-        valid_moves = list(get_valid_moves(game_state, snake_head).keys())
-        return random.choice(valid_moves)
+        valid_moves = self.get_valid_moves(state.get_grid(), snake_head, snake_body)
+        return random.choice(list(valid_moves.keys()))
+
+    def heuristic(self, pos, goal):
+        """Return the heuristic value (estimated cost) from pos to goal."""
+        return abs(pos[0] - goal[0]) + abs(pos[1] - goal[1])
+
+    def get_valid_moves(self, grid, snake_head, snake_body):
+        """Return all valid moves for the snake based on the current game state."""
+        moves = {
+            UP: (snake_head[0], snake_head[1] - 1),
+            DOWN: (snake_head[0], snake_head[1] + 1),
+            LEFT: (snake_head[0] - 1, snake_head[1]),
+            RIGHT: (snake_head[0] + 1, snake_head[1]),
+        }
+
+        valid_moves = {}
+        for action, (nx, ny) in moves.items():
+            if (
+                0 <= nx < GRID_WIDTH  # Check horizontal bounds
+                and 0 <= ny < GRID_HEIGHT  # Check vertical bounds
+                and (nx, ny) not in snake_body  # Avoid the snake's body
+            ):
+                valid_moves[action] = (nx, ny)
+
+        return valid_moves
+
 
 class DefensiveAgent(Agent):
     """An agent that prioritizes survival over reaching the food."""
@@ -313,16 +358,14 @@ def get_valid_moves(game_state, snake_head):
         LEFT: (snake_head[0] - 1, snake_head[1]),
         RIGHT: (snake_head[0] + 1, snake_head[1]),
     }
-
+    grid = game_state.get_grid()
     valid_moves = {}
     for action, (nx, ny) in moves.items():
         if (
-                0 <= nx < len(game_state[0])  # Check horizontal bounds
-                and 0 <= ny < len(game_state)  # Check vertical bounds
-                and game_state[ny][nx] != 1  # Avoid the snake's body
+                0 <= nx < len(grid[0])  # Check horizontal bounds
+                and 0 <= ny < len(grid)  # Check vertical bounds
+                and grid[ny][nx] != 1  # Avoid the snake's body
         ):
             valid_moves[action] = (nx, ny)
 
     return valid_moves
-
-    import heapq

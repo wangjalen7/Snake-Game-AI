@@ -2,7 +2,7 @@ from snake_game import GRID_WIDTH, GRID_HEIGHT
 
 
 class GameState:
-    """Convert the game state into a 2D grid representation, inlcuding direction."""
+    """Convert the game state into a 2D grid representation, including direction."""
 
     def __init__(self, game):
         self.game = game
@@ -20,7 +20,15 @@ class GameState:
         grid[food_y][food_x] = 2  # Food is represented as 2
 
         return grid
-    
+
+    def get_snake_body(self):
+        """Return the snake's body positions as a list."""
+        return self.game.get_snake()
+
+    def get_food(self):
+        """Return the food position."""
+        return self.game.get_food()
+
     def get_direction(self):
         """Return the current direction of the snake."""
         return self.game.direction
