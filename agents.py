@@ -1,5 +1,5 @@
 import random
-import numpy as np
+# import numpy as np
 import heapq
 from collections import defaultdict, deque
 
@@ -98,7 +98,7 @@ class PathfindingAgent(Agent):
         # If no path found, fallback to a random valid move
         return random.choice(list(get_valid_moves(game_state, snake_head).keys()))
 
-
+# AStarAgent/pygame crashes every time once the score reaches ~1800 for some reason
 class AStarAgent(Agent):
     """An agent that uses A* search to move towards the food."""
 
