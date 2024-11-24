@@ -1,5 +1,3 @@
-# snake_game_ai.py
-
 import pygame
 import random
 import sys

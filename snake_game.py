@@ -1,5 +1,3 @@
-# snake_game.py
-
 import pygame
 import random
 import sys
@@ -8,13 +6,7 @@ import sys
 pygame.init()
 
 # Game Constants
-WINDOW_WIDTH = 600
-WINDOW_HEIGHT = 400
-CELL_SIZE = 20
-
-# Grid Dimensions
-GRID_WIDTH = WINDOW_WIDTH // CELL_SIZE
-GRID_HEIGHT = WINDOW_HEIGHT // CELL_SIZE
+CELL_SIZE = 20  # Cell size remains constant
 
 # Colors
 WHITE = (255, 255, 255)
@@ -24,100 +16,141 @@ RED = (200, 0, 0)
 GREEN = (0, 180, 0)
 
 # Directions
-UP = (0, -1)
-DOWN = (0, 1)
-LEFT = (-1, 0)
-RIGHT = (1, 0)
+UP = 'UP'
+DOWN = 'DOWN'
+LEFT = 'LEFT'
+RIGHT = 'RIGHT'
+DIRECTIONS = [UP, DOWN, LEFT, RIGHT]
+DIRECTION_VECTORS = {
+    UP: (0, -1),
+    DOWN: (0, 1),
+    LEFT: (-1, 0),
+    RIGHT: (1, 0)
+}
 
-# Set up the display
-screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
-pygame.display.set_caption('Snake Game')
+class SnakeGame:
+    def __init__(self, width=600, height=400):
+        # Game Dimensions
+        self.WINDOW_WIDTH = width
+        self.WINDOW_HEIGHT = height
 
-# Set up the clock
-clock = pygame.time.Clock()
+        # Grid Dimensions
+        self.GRID_WIDTH = self.WINDOW_WIDTH // CELL_SIZE
+        self.GRID_HEIGHT = self.WINDOW_HEIGHT // CELL_SIZE
 
-# Font for score display
-font = pygame.font.SysFont('Arial', 24)
+        # Set up the display
+        self.screen = pygame.display.set_mode((self.WINDOW_WIDTH, self.WINDOW_HEIGHT))
+        pygame.display.set_caption('Snake Game')
 
-def draw_cell(position, color):
-    rect = pygame.Rect(position[0] * CELL_SIZE, position[1] * CELL_SIZE, CELL_SIZE, CELL_SIZE)
-    pygame.draw.rect(screen, color, rect)
+        # Set up the clock
+        self.clock = pygame.time.Clock()
 
-def draw_grid():
-    for x in range(0, WINDOW_WIDTH, CELL_SIZE):
-        pygame.draw.line(screen, GRAY, (x, 0), (x, WINDOW_HEIGHT))
-    for y in range(0, WINDOW_HEIGHT, CELL_SIZE):
-        pygame.draw.line(screen, GRAY, (0, y), (WINDOW_WIDTH, y))
+        # Font for score display
+        self.font = pygame.font.SysFont('Arial', 24)
 
-def main():
-    # Game Variables
-    snake = [(GRID_WIDTH // 2, GRID_HEIGHT // 2)]
-    direction = RIGHT
-    pellet = (random.randint(0, GRID_WIDTH - 1), random.randint(0, GRID_HEIGHT - 1))
-    score = 0
-    speed = 10  # Game speed in frames per second
+        # Game Variables
+        self.reset()
 
-    running = True
-    while running:
-        clock.tick(speed)
-        screen.fill(BLACK)
-        draw_grid()
+    def reset(self):
+        self.snake = [(self.GRID_WIDTH // 2, self.GRID_HEIGHT // 2)]
+        self.direction = RIGHT
+        self.score = 0
+        self.speed = 10  # Game speed in frames per second
+        self.pellets = []
+        self.spawn_pellets(2)  # Initially spawn two pellets
 
+    def spawn_pellets(self, num_pellets=2):
+        """
+        Ensures that there are always 'num_pellets' pellets on the board.
+        Adds new pellets without removing existing ones.
+        """
+        while len(self.pellets) < num_pellets:
+            pellet = (
+                random.randint(0, self.GRID_WIDTH - 1),
+                random.randint(0, self.GRID_HEIGHT - 1)
+            )
+            if pellet not in self.snake and pellet not in self.pellets:
+                self.pellets.append(pellet)
+
+    def draw_cell(self, position, color):
+        rect = pygame.Rect(
+            position[0] * CELL_SIZE,
+            position[1] * CELL_SIZE,
+            CELL_SIZE,
+            CELL_SIZE
+        )
+        pygame.draw.rect(self.screen, color, rect)
+
+    def draw_grid(self):
+        for x in range(0, self.WINDOW_WIDTH, CELL_SIZE):
+            pygame.draw.line(self.screen, GRAY, (x, 0), (x, self.WINDOW_HEIGHT))
+        for y in range(0, self.WINDOW_HEIGHT, CELL_SIZE):
+            pygame.draw.line(self.screen, GRAY, (0, y), (self.WINDOW_WIDTH, y))
+
+    def handle_events(self):
         # Event Handling
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                running = False
-                break
+                pygame.quit()
+                sys.exit()
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_UP and direction != DOWN:
-                    direction = UP
-                elif event.key == pygame.K_DOWN and direction != UP:
-                    direction = DOWN
-                elif event.key == pygame.K_LEFT and direction != RIGHT:
-                    direction = LEFT
-                elif event.key == pygame.K_RIGHT and direction != LEFT:
-                    direction = RIGHT
+                if event.key == pygame.K_UP and self.direction != DOWN:
+                    self.direction = UP
+                elif event.key == pygame.K_DOWN and self.direction != UP:
+                    self.direction = DOWN
+                elif event.key == pygame.K_LEFT and self.direction != RIGHT:
+                    self.direction = LEFT
+                elif event.key == pygame.K_RIGHT and self.direction != LEFT:
+                    self.direction = RIGHT
 
-        if not running:
-            break
+    def move_snake(self):
+        dx, dy = DIRECTION_VECTORS[self.direction]
+        new_head = (
+            (self.snake[0][0] + dx) % self.GRID_WIDTH,
+            (self.snake[0][1] + dy) % self.GRID_HEIGHT
+        )
 
-        # Move Snake
-        new_head = ((snake[0][0] + direction[0]) % GRID_WIDTH, (snake[0][1] + direction[1]) % GRID_HEIGHT)
-
-        # Collision Detection
-        if new_head in snake:
+        # Collision Detection with self
+        if new_head in self.snake:
             print("Game Over! You collided with yourself.")
-            running = False
-            continue
+            pygame.quit()
+            sys.exit()
 
-        snake.insert(0, new_head)
+        self.snake.insert(0, new_head)
 
         # Check for pellet collision
-        if new_head == pellet:
-            score += 1
-            # Place new pellet
-            while True:
-                pellet = (random.randint(0, GRID_WIDTH - 1), random.randint(0, GRID_HEIGHT - 1))
-                if pellet not in snake:
-                    break
+        if new_head in self.pellets:
+            self.score += 1
+            self.pellets.remove(new_head)
+            self.spawn_pellets(2)  # Ensure there are always two pellets
         else:
-            snake.pop()  # Remove last segment
+            self.snake.pop()  # Remove last segment
 
+    def draw_elements(self):
+        self.screen.fill(BLACK)
+        self.draw_grid()
         # Draw Snake
-        for segment in snake:
-            draw_cell(segment, GREEN)
-
-        # Draw Pellet
-        draw_cell(pellet, RED)
-
+        for segment in self.snake:
+            self.draw_cell(segment, GREEN)
+        # Draw Pellets
+        for pellet in self.pellets:
+            self.draw_cell(pellet, RED)
         # Draw Score
-        score_text = font.render(f"Score: {score}", True, WHITE)
-        screen.blit(score_text, (5, 5))
-
+        score_text = self.font.render(f"Score: {self.score}", True, WHITE)
+        self.screen.blit(score_text, (5, 5))
         pygame.display.flip()
 
-    pygame.quit()
-    sys.exit()
+    def run(self):
+        while True:
+            self.clock.tick(self.speed)
+            self.handle_events()
+            self.move_snake()
+            self.draw_elements()
+
+def main():
+    # You can set the game board size here (width, height)
+    game = SnakeGame(width=800, height=600)
+    game.run()
 
 if __name__ == "__main__":
     main()
