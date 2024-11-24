@@ -1,9 +1,6 @@
-# snake_game_ai.py
-
 import pygame
 import random
 import sys
-import numpy as np
 import heapq
 
 # Initialize Pygame
@@ -27,161 +24,173 @@ GREEN = (0, 180, 0)
 BLUE = (0, 0, 255)
 
 # Directions
-UP = (0, -1)
-DOWN = (0, 1)
-LEFT = (-1, 0)
-RIGHT = (1, 0)
+UP = 'UP'
+DOWN = 'DOWN'
+LEFT = 'LEFT'
+RIGHT = 'RIGHT'
 DIRECTIONS = [UP, DOWN, LEFT, RIGHT]
+DIRECTION_VECTORS = {
+    UP: (0, -1),
+    DOWN: (0, 1),
+    LEFT: (-1, 0),
+    RIGHT: (1, 0)
+}
 
-# Set up the display
-screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
-pygame.display.set_caption('Snake Game with AI')
+class SnakeGameAI:
+    def __init__(self):
+        # Set up the display
+        self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
+        pygame.display.set_caption('Snake Game with AI')
 
-# Set up the clock
-clock = pygame.time.Clock()
+        # Set up the clock
+        self.clock = pygame.time.Clock()
 
-# Font for score display
-font = pygame.font.SysFont('Arial', 24)
+        # Font for score display
+        self.font = pygame.font.SysFont('Arial', 24)
 
-def draw_cell(position, color):
-    rect = pygame.Rect(position[0] * CELL_SIZE, position[1] * CELL_SIZE, CELL_SIZE, CELL_SIZE)
-    pygame.draw.rect(screen, color, rect)
+        # Game Variables
+        self.reset()
 
-def draw_grid():
-    for x in range(0, WINDOW_WIDTH, CELL_SIZE):
-        pygame.draw.line(screen, GRAY, (x, 0), (x, WINDOW_HEIGHT))
-    for y in range(0, WINDOW_HEIGHT, CELL_SIZE):
-        pygame.draw.line(screen, GRAY, (0, y), (WINDOW_WIDTH, y))
+    def reset(self):
+        self.snake = [(GRID_WIDTH // 2, GRID_HEIGHT // 2)]
+        self.score = 0
+        self.speed = 10  # Game speed in frames per second
+        self.spawn_pellet()
+        self.path = []
 
-def manhattan_distance(a, b):
-    return abs(a[0] - b[0]) + abs(a[1] - b[1])
+    def spawn_pellet(self):
+        while True:
+            self.pellet = (
+                random.randint(0, GRID_WIDTH - 1),
+                random.randint(0, GRID_HEIGHT - 1)
+            )
+            if self.pellet not in self.snake:
+                break
 
-def bfs(snake, pellet, obstacles):
-    from collections import deque
-    start = snake[0]
-    queue = deque()
-    queue.append((start, []))
-    visited = set()
-    visited.add(start)
+    def draw_cell(self, position, color):
+        rect = pygame.Rect(
+            position[0] * CELL_SIZE,
+            position[1] * CELL_SIZE,
+            CELL_SIZE,
+            CELL_SIZE
+        )
+        pygame.draw.rect(self.screen, color, rect)
 
-    while queue:
-        current_pos, path = queue.popleft()
-        if current_pos == pellet:
-            return path  # Found the path
+    def draw_grid(self):
+        for x in range(0, WINDOW_WIDTH, CELL_SIZE):
+            pygame.draw.line(self.screen, GRAY, (x, 0), (x, WINDOW_HEIGHT))
+        for y in range(0, WINDOW_HEIGHT, CELL_SIZE):
+            pygame.draw.line(self.screen, GRAY, (0, y), (WINDOW_WIDTH, y))
 
+    def draw_elements(self):
+        self.screen.fill(BLACK)
+        self.draw_grid()
+        # Draw Snake
+        for segment in self.snake:
+            self.draw_cell(segment, GREEN)
+        # Draw Pellet
+        self.draw_cell(self.pellet, RED)
+        # Draw Score
+        score_text = self.font.render(f"Score: {self.score}", True, WHITE)
+        self.screen.blit(score_text, (5, 5))
+        pygame.display.flip()
+
+    def manhattan_distance(self, a, b):
+        return abs(a[0] - b[0]) + abs(a[1] - b[1])
+
+    def get_neighbors(self, position):
+        neighbors = []
         for direction in DIRECTIONS:
-            new_x = (current_pos[0] + direction[0]) % GRID_WIDTH
-            new_y = (current_pos[1] + direction[1]) % GRID_HEIGHT
-            new_pos = (new_x, new_y)
+            dx, dy = DIRECTION_VECTORS[direction]
+            new_x = position[0] + dx
+            new_y = position[1] + dy
+            if 0 <= new_x < GRID_WIDTH and 0 <= new_y < GRID_HEIGHT:
+                neighbors.append(((new_x, new_y), direction))
+        return neighbors
 
-            if new_pos in visited or new_pos in obstacles:
+    def a_star(self):
+        start = self.snake[0]
+        goal = self.pellet
+        obstacles = set(self.snake[1:])
+        open_set = []
+        heapq.heappush(open_set, (0 + self.manhattan_distance(start, goal), 0, start, []))
+        closed_set = set()
+
+        while open_set:
+            est_total_cost, cost_so_far, current_pos, path = heapq.heappop(open_set)
+
+            if current_pos == goal:
+                return path  # Found the path
+
+            if current_pos in closed_set:
                 continue
+            closed_set.add(current_pos)
 
-            visited.add(new_pos)
-            queue.append((new_pos, path + [direction]))
-    return None  # No path found
+            for neighbor_pos, direction in self.get_neighbors(current_pos):
+                if neighbor_pos in obstacles or neighbor_pos in closed_set:
+                    continue
+                new_cost = cost_so_far + 1
+                est_total_cost = new_cost + self.manhattan_distance(neighbor_pos, goal)
+                heapq.heappush(open_set, (est_total_cost, new_cost, neighbor_pos, path + [direction]))
+        return None  # No path found
 
-def a_star(snake, pellet, obstacles):
-    start = snake[0]
-    heap = []
-    heapq.heappush(heap, (0, start, []))
-    visited = set()
-    visited.add(start)
-
-    while heap:
-        cost, current_pos, path = heapq.heappop(heap)
-        if current_pos == pellet:
-            return path  # Found the path
-
-        for direction in DIRECTIONS:
-            new_x = (current_pos[0] + direction[0]) % GRID_WIDTH
-            new_y = (current_pos[1] + direction[1]) % GRID_HEIGHT
-            new_pos = (new_x, new_y)
-
-            if new_pos in visited or new_pos in obstacles:
-                continue
-
-            visited.add(new_pos)
-            new_cost = len(path) + 1 + manhattan_distance(new_pos, pellet)
-            heapq.heappush(heap, (new_cost, new_pos, path + [direction]))
-    return None  # No path found
-
-def main():
-    # Game Variables
-    snake = [(GRID_WIDTH // 2, GRID_HEIGHT // 2)]
-    pellet = (random.randint(0, GRID_WIDTH - 1), random.randint(0, GRID_HEIGHT - 1))
-    score = 0
-    speed = 10  # Game speed in frames per second
-    path = []
-
-    running = True
-    while running:
-        clock.tick(speed)
-        screen.fill(BLACK)
-        draw_grid()
-
+    def handle_events(self):
         # Event Handling
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                running = False
-                break
+                pygame.quit()
+                sys.exit()
 
-        if not running:
-            break
+    def move_snake(self, direction):
+        dx, dy = DIRECTION_VECTORS[direction]
+        new_head = (self.snake[0][0] + dx, self.snake[0][1] + dy)
 
-        # Get obstacles (snake body excluding the head)
-        obstacles = set(snake[1:])
+        # Check for collision with walls
+        if not (0 <= new_head[0] < GRID_WIDTH and 0 <= new_head[1] < GRID_HEIGHT):
+            print("Game Over! The snake hit a wall.")
+            pygame.quit()
+            sys.exit()
 
-        # Check if path is empty or invalid
-        if not path:
-            # Choose algorithm: bfs or a_star
-            # path = bfs(snake, pellet, obstacles)
-            path = a_star(snake, pellet, obstacles)
-            if path is None:
-                # No path to pellet, move randomly
-                path = [random.choice(DIRECTIONS)]
-
-        # Get next move
-        direction = path.pop(0)
-
-        # Move Snake
-        new_head = ((snake[0][0] + direction[0]) % GRID_WIDTH,
-                    (snake[0][1] + direction[1]) % GRID_HEIGHT)
-
-        # Collision Detection
-        if new_head in obstacles:
+        # Collision Detection with self
+        if new_head in self.snake:
             print("Game Over! The snake collided with itself.")
-            running = False
-            continue
+            pygame.quit()
+            sys.exit()
 
-        snake.insert(0, new_head)
+        self.snake.insert(0, new_head)
 
         # Check for pellet collision
-        if new_head == pellet:
-            score += 1
-            # Place new pellet
-            while True:
-                pellet = (random.randint(0, GRID_WIDTH - 1), random.randint(0, GRID_HEIGHT - 1))
-                if pellet not in snake:
-                    break
+        if new_head == self.pellet:
+            self.score += 1
+            self.spawn_pellet()
         else:
-            snake.pop()  # Remove last segment
+            self.snake.pop()  # Remove last segment
 
-        # Draw Snake
-        for segment in snake:
-            draw_cell(segment, GREEN)
+    def run(self):
+        while True:
+            self.clock.tick(self.speed)
+            self.handle_events()
 
-        # Draw Pellet
-        draw_cell(pellet, RED)
+            # Get obstacles (snake body excluding the head)
+            obstacles = set(self.snake[1:])
 
-        # Draw Score
-        score_text = font.render(f"Score: {score}", True, WHITE)
-        screen.blit(score_text, (5, 5))
+            # Check if path is empty or invalid
+            if not self.path:
+                self.path = self.a_star()
+                if not self.path:
+                    # No path found; end the game
+                    print("No path to pellet. Game Over!")
+                    pygame.quit()
+                    sys.exit()
 
-        pygame.display.flip()
+            # Get next move
+            direction = self.path.pop(0)
+            self.move_snake(direction)
+            self.draw_elements()
 
-    pygame.quit()
-    sys.exit()
+def main():
+    game = SnakeGameAI()
+    game.run()
 
 if __name__ == "__main__":
     main()
