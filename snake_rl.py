@@ -1,5 +1,3 @@
-# snake_rl.py
-
 import pygame
 import random
 import sys
@@ -38,15 +36,19 @@ DIRECTION_VECTORS = {
     RIGHT: (1, 0)
 }
 
-# Set up the display
-screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
-pygame.display.set_caption('Snake RL Agent')
+# Action Constants
+STRAIGHT = 0
+RIGHT_TURN = 1
+LEFT_TURN = 2
 
-# Set up the clock
-clock = pygame.time.Clock()
-
-class SnakeGame:
-    def __init__(self):
+class SnakeGameRL:
+    def __init__(self, render=False):
+        self.render_game = render
+        if self.render_game:
+            self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
+            pygame.display.set_caption('Snake RL Agent')
+            self.clock = pygame.time.Clock()
+            self.font = pygame.font.SysFont('Arial', 24)
         self.reset()
 
     def reset(self):
@@ -55,43 +57,50 @@ class SnakeGame:
         self.place_pellet()
         self.score = 0
         self.frame = 0
+        self.steps_since_last_pellet = 0
         return self.get_state()
 
     def place_pellet(self):
         while True:
-            self.pellet = (random.randint(0, GRID_WIDTH - 1),
-                           random.randint(0, GRID_HEIGHT - 1))
+            self.pellet = (
+                random.randint(0, GRID_WIDTH - 1),
+                random.randint(0, GRID_HEIGHT - 1)
+            )
             if self.pellet not in self.snake:
                 break
 
     def get_state(self):
-        head_x, head_y = self.snake[0]
+        head = self.snake[0]
+        dir_vector = DIRECTION_VECTORS[self.direction]
+        left_dir = DIRECTION_VECTORS[(self.direction - 1) % 4]
+        right_dir = DIRECTION_VECTORS[(self.direction + 1) % 4]
+
         state = [
             # Danger straight
-            self.is_collision(self.snake[0], self.direction),
+            self.is_collision(head, dir_vector),
             # Danger right
-            self.is_collision(self.snake[0], (self.direction + 1) % 4),
+            self.is_collision(head, right_dir),
             # Danger left
-            self.is_collision(self.snake[0], (self.direction - 1) % 4),
+            self.is_collision(head, left_dir),
             # Move direction
-            self.direction == UP,
-            self.direction == DOWN,
-            self.direction == LEFT,
-            self.direction == RIGHT,
+            dir_vector == DIRECTION_VECTORS[UP],
+            dir_vector == DIRECTION_VECTORS[DOWN],
+            dir_vector == DIRECTION_VECTORS[LEFT],
+            dir_vector == DIRECTION_VECTORS[RIGHT],
             # Food location
-            self.pellet[0] < head_x,  # Food left
-            self.pellet[0] > head_x,  # Food right
-            self.pellet[1] < head_y,  # Food up
-            self.pellet[1] > head_y   # Food down
+            self.pellet[0] < head[0],  # Food left
+            self.pellet[0] > head[0],  # Food right
+            self.pellet[1] < head[1],  # Food up
+            self.pellet[1] > head[1]   # Food down
         ]
         return np.array(state, dtype=int)
 
     def is_collision(self, position, direction):
         x, y = position
-        dx, dy = DIRECTION_VECTORS[direction]
+        dx, dy = direction
         new_x = x + dx
         new_y = y + dy
-        if new_x < 0 or new_x >= GRID_WIDTH or new_y < 0 or new_y >= GRID_HEIGHT:
+        if not (0 <= new_x < GRID_WIDTH and 0 <= new_y < GRID_HEIGHT):
             return True
         if (new_x, new_y) in self.snake[1:]:
             return True
@@ -99,12 +108,13 @@ class SnakeGame:
 
     def step(self, action):
         self.frame += 1
+        self.steps_since_last_pellet += 1
         # Update the direction based on action
-        if action == 0:  # Straight
+        if action == STRAIGHT:
             pass  # Keep current direction
-        elif action == 1:  # Right turn
+        elif action == RIGHT_TURN:
             self.direction = (self.direction + 1) % 4
-        elif action == 2:  # Left turn
+        elif action == LEFT_TURN:
             self.direction = (self.direction - 1) % 4
 
         dx, dy = DIRECTION_VECTORS[self.direction]
@@ -113,7 +123,7 @@ class SnakeGame:
         # Check for collision
         reward = 0
         done = False
-        if self.is_collision(self.snake[0], self.direction):
+        if self.is_collision(self.snake[0], DIRECTION_VECTORS[self.direction]):
             reward = -10
             done = True
             return self.get_state(), reward, done, self.score
@@ -124,53 +134,58 @@ class SnakeGame:
             self.score += 1
             reward = 10
             self.place_pellet()
+            self.steps_since_last_pellet = 0
         else:
             self.snake.pop()
-            reward = 0.1  # Small reward for staying alive
+            reward = 0  # No reward for just moving
 
         # Optional: Add a limit to the number of frames without eating
-        if self.frame > 100 * len(self.snake):
+        if self.steps_since_last_pellet > 100:
             done = True
+            reward = -10  # Penalty for taking too long
 
         return self.get_state(), reward, done, self.score
 
     def render(self):
-        screen.fill(BLACK)
+        if not self.render_game:
+            return
+        self.screen.fill(BLACK)
         for segment in self.snake:
             rect = pygame.Rect(segment[0] * CELL_SIZE, segment[1] * CELL_SIZE, CELL_SIZE, CELL_SIZE)
-            pygame.draw.rect(screen, GREEN, rect)
+            pygame.draw.rect(self.screen, GREEN, rect)
 
         # Draw pellet
         pellet_rect = pygame.Rect(self.pellet[0] * CELL_SIZE, self.pellet[1] * CELL_SIZE, CELL_SIZE, CELL_SIZE)
-        pygame.draw.rect(screen, RED, pellet_rect)
+        pygame.draw.rect(self.screen, RED, pellet_rect)
 
         # Draw score
-        font = pygame.font.SysFont('Arial', 24)
-        score_text = font.render(f"Score: {self.score}", True, WHITE)
-        screen.blit(score_text, (5, 5))
+        score_text = self.font.render(f"Score: {self.score}", True, WHITE)
+        self.screen.blit(score_text, (5, 5))
 
         pygame.display.flip()
+        self.clock.tick(15)  # Limit to 15 FPS
 
 class Agent:
     def __init__(self):
         self.state_size = 11
         self.action_size = 3  # [straight, right turn, left turn]
-        self.memory = deque(maxlen=2000)
+        self.memory = deque(maxlen=100000)
         self.gamma = 0.99  # Discount rate
         self.epsilon = 1.0  # Exploration rate
         self.epsilon_min = 0.01
         self.epsilon_decay = 0.995
-        self.learning_rate = 0.0005
+        self.learning_rate = 0.001
         self.model = self._build_model()
         self.target_model = self._build_model()
         self.update_target_model()
         self.batch_size = 64
         self.train_start = 1000  # Start training after some experiences
+        self.steps = 0  # Total steps taken
 
     def _build_model(self):
         model = tf.keras.Sequential([
-            tf.keras.layers.Dense(24, input_dim=self.state_size, activation='relu'),
-            tf.keras.layers.Dense(24, activation='relu'),
+            tf.keras.layers.Dense(128, input_dim=self.state_size, activation='relu'),
+            tf.keras.layers.Dense(128, activation='relu'),
             tf.keras.layers.Dense(self.action_size, activation='linear')
         ])
         model.compile(loss='mse', optimizer=tf.keras.optimizers.Adam(lr=self.learning_rate))
@@ -187,6 +202,7 @@ class Agent:
 
     def remember(self, state, action, reward, next_state, done):
         self.memory.append((state, action, reward, next_state, done))
+        self.steps += 1
 
     def replay(self):
         if len(self.memory) < self.train_start:
@@ -216,7 +232,7 @@ class Agent:
             self.epsilon *= self.epsilon_decay
 
 def main():
-    game = SnakeGame()
+    game = SnakeGameRL(render=True)  # Set render=True to visualize
     agent = Agent()
     episodes = 1000
     scores = []
@@ -231,9 +247,7 @@ def main():
         steps = 0
 
         while not done:
-            # Uncomment to visualize training (will slow down training)
-            # game.render()
-
+            game.render()
             action = agent.act(state)
             next_state, reward, done, score = game.step(action)
             agent.remember(state, action, reward, next_state, done)
@@ -250,7 +264,9 @@ def main():
                     pygame.quit()
                     sys.exit()
 
-        agent.update_target_model()
+            if agent.steps % 1000 == 0:
+                agent.update_target_model()
+
         agent.decay_epsilon()
 
         # Collect metrics
@@ -266,41 +282,6 @@ def main():
 
     pygame.quit()
 
-    # Plot the scores
-    import matplotlib.pyplot as plt
-
-    # Plot Scores
-    plt.figure(figsize=(12,5))
-    plt.subplot(1,2,1)
-    plt.plot(scores)
-    plt.xlabel('Episode')
-    plt.ylabel('Score')
-    plt.title('Score over Episodes')
-
-    # Plot Survival Times
-    plt.subplot(1,2,2)
-    plt.plot(survival_times)
-    plt.xlabel('Episode')
-    plt.ylabel('Survival Time (Steps)')
-    plt.title('Survival Time over Episodes')
-    plt.tight_layout()
-    plt.show()
-
-    # Plot Losses
-    plt.figure()
-    plt.plot(losses)
-    plt.xlabel('Episode')
-    plt.ylabel('Loss')
-    plt.title('Training Loss over Episodes')
-    plt.show()
-
-    # Plot Epsilon
-    plt.figure()
-    plt.plot(epsilons)
-    plt.xlabel('Episode')
-    plt.ylabel('Epsilon')
-    plt.title('Epsilon over Episodes')
-    plt.show()
 
     # Save the model
     agent.model.save('snake_dqn_model.h5')
