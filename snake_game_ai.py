@@ -7,13 +7,7 @@ import heapq
 pygame.init()
 
 # Game Constants
-WINDOW_WIDTH = 600
-WINDOW_HEIGHT = 400
-CELL_SIZE = 20
-
-# Grid Dimensions
-GRID_WIDTH = WINDOW_WIDTH // CELL_SIZE
-GRID_HEIGHT = WINDOW_HEIGHT // CELL_SIZE
+CELL_SIZE = 20  # Cell size remains constant
 
 # Colors
 WHITE = (255, 255, 255)
@@ -37,9 +31,17 @@ DIRECTION_VECTORS = {
 }
 
 class SnakeGameAI:
-    def __init__(self):
+    def __init__(self, width=600, height=400):
+        # Game Dimensions
+        self.WINDOW_WIDTH = width
+        self.WINDOW_HEIGHT = height
+
+        # Grid Dimensions
+        self.GRID_WIDTH = self.WINDOW_WIDTH // CELL_SIZE
+        self.GRID_HEIGHT = self.WINDOW_HEIGHT // CELL_SIZE
+
         # Set up the display
-        self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
+        self.screen = pygame.display.set_mode((self.WINDOW_WIDTH, self.WINDOW_HEIGHT))
         pygame.display.set_caption('Snake Game with AI')
 
         # Set up the clock
@@ -52,20 +54,25 @@ class SnakeGameAI:
         self.reset()
 
     def reset(self):
-        self.snake = [(GRID_WIDTH // 2, GRID_HEIGHT // 2)]
+        self.snake = [(self.GRID_WIDTH // 2, self.GRID_HEIGHT // 2)]
         self.score = 0
         self.speed = 10  # Game speed in frames per second
-        self.spawn_pellet()
+        self.pellets = []
+        self.spawn_pellets(2)  # Initially spawn two pellets
         self.path = []
 
-    def spawn_pellet(self):
-        while True:
-            self.pellet = (
-                random.randint(0, GRID_WIDTH - 1),
-                random.randint(0, GRID_HEIGHT - 1)
+    def spawn_pellets(self, num_pellets=2):
+        """
+        Ensures that there are always 'num_pellets' pellets on the board.
+        Adds new pellets without removing existing ones.
+        """
+        while len(self.pellets) < num_pellets:
+            pellet = (
+                random.randint(0, self.GRID_WIDTH - 1),
+                random.randint(0, self.GRID_HEIGHT - 1)
             )
-            if self.pellet not in self.snake:
-                break
+            if pellet not in self.snake and pellet not in self.pellets:
+                self.pellets.append(pellet)
 
     def draw_cell(self, position, color):
         rect = pygame.Rect(
@@ -77,10 +84,10 @@ class SnakeGameAI:
         pygame.draw.rect(self.screen, color, rect)
 
     def draw_grid(self):
-        for x in range(0, WINDOW_WIDTH, CELL_SIZE):
-            pygame.draw.line(self.screen, GRAY, (x, 0), (x, WINDOW_HEIGHT))
-        for y in range(0, WINDOW_HEIGHT, CELL_SIZE):
-            pygame.draw.line(self.screen, GRAY, (0, y), (WINDOW_WIDTH, y))
+        for x in range(0, self.WINDOW_WIDTH, CELL_SIZE):
+            pygame.draw.line(self.screen, GRAY, (x, 0), (x, self.WINDOW_HEIGHT))
+        for y in range(0, self.WINDOW_HEIGHT, CELL_SIZE):
+            pygame.draw.line(self.screen, GRAY, (0, y), (self.WINDOW_WIDTH, y))
 
     def draw_elements(self):
         self.screen.fill(BLACK)
@@ -88,8 +95,9 @@ class SnakeGameAI:
         # Draw Snake
         for segment in self.snake:
             self.draw_cell(segment, GREEN)
-        # Draw Pellet
-        self.draw_cell(self.pellet, RED)
+        # Draw Pellets
+        for pellet in self.pellets:
+            self.draw_cell(pellet, RED)
         # Draw Score
         score_text = self.font.render(f"Score: {self.score}", True, WHITE)
         self.screen.blit(score_text, (5, 5))
@@ -104,23 +112,25 @@ class SnakeGameAI:
             dx, dy = DIRECTION_VECTORS[direction]
             new_x = position[0] + dx
             new_y = position[1] + dy
-            if 0 <= new_x < GRID_WIDTH and 0 <= new_y < GRID_HEIGHT:
+            if 0 <= new_x < self.GRID_WIDTH and 0 <= new_y < self.GRID_HEIGHT:
                 neighbors.append(((new_x, new_y), direction))
         return neighbors
 
     def a_star(self):
         start = self.snake[0]
-        goal = self.pellet
+        goals = self.pellets.copy()
         obstacles = set(self.snake[1:])
         open_set = []
-        heapq.heappush(open_set, (0 + self.manhattan_distance(start, goal), 0, start, []))
+        # Push tuples of (estimated_total_cost, cost_so_far, current_position, path)
+        for goal in goals:
+            heapq.heappush(open_set, (self.manhattan_distance(start, goal), 0, start, []))
         closed_set = set()
 
         while open_set:
             est_total_cost, cost_so_far, current_pos, path = heapq.heappop(open_set)
 
-            if current_pos == goal:
-                return path  # Found the path
+            if current_pos in goals:
+                return path  # Found the path to a pellet
 
             if current_pos in closed_set:
                 continue
@@ -130,8 +140,9 @@ class SnakeGameAI:
                 if neighbor_pos in obstacles or neighbor_pos in closed_set:
                     continue
                 new_cost = cost_so_far + 1
-                est_total_cost = new_cost + self.manhattan_distance(neighbor_pos, goal)
-                heapq.heappush(open_set, (est_total_cost, new_cost, neighbor_pos, path + [direction]))
+                heuristic = min(self.manhattan_distance(neighbor_pos, goal) for goal in goals)
+                est_total = new_cost + heuristic
+                heapq.heappush(open_set, (est_total, new_cost, neighbor_pos, path + [direction]))
         return None  # No path found
 
     def handle_events(self):
@@ -146,7 +157,7 @@ class SnakeGameAI:
         new_head = (self.snake[0][0] + dx, self.snake[0][1] + dy)
 
         # Check for collision with walls
-        if not (0 <= new_head[0] < GRID_WIDTH and 0 <= new_head[1] < GRID_HEIGHT):
+        if not (0 <= new_head[0] < self.GRID_WIDTH and 0 <= new_head[1] < self.GRID_HEIGHT):
             print("Game Over! The snake hit a wall.")
             pygame.quit()
             sys.exit()
@@ -160,9 +171,10 @@ class SnakeGameAI:
         self.snake.insert(0, new_head)
 
         # Check for pellet collision
-        if new_head == self.pellet:
+        if new_head in self.pellets:
             self.score += 1
-            self.spawn_pellet()
+            self.pellets.remove(new_head)
+            self.spawn_pellets(2)  # Ensure there are always two pellets
         else:
             self.snake.pop()  # Remove last segment
 
@@ -171,15 +183,12 @@ class SnakeGameAI:
             self.clock.tick(self.speed)
             self.handle_events()
 
-            # Get obstacles (snake body excluding the head)
-            obstacles = set(self.snake[1:])
-
             # Check if path is empty or invalid
             if not self.path:
                 self.path = self.a_star()
                 if not self.path:
                     # No path found; end the game
-                    print("No path to pellet. Game Over!")
+                    print("No path to any pellet. Game Over!")
                     pygame.quit()
                     sys.exit()
 
@@ -189,7 +198,8 @@ class SnakeGameAI:
             self.draw_elements()
 
 def main():
-    game = SnakeGameAI()
+    # You can set the game board size here (width, height)
+    game = SnakeGameAI(width=800, height=600)
     game.run()
 
 if __name__ == "__main__":
