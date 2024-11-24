@@ -1,3 +1,5 @@
+# snake_game_ai.py
+
 import pygame
 import random
 import sys
@@ -104,16 +106,17 @@ class SnakeGameAI:
         pygame.display.flip()
 
     def manhattan_distance(self, a, b):
-        return abs(a[0] - b[0]) + abs(a[1] - b[1])
+        dx = min(abs(a[0] - b[0]), self.GRID_WIDTH - abs(a[0] - b[0]))
+        dy = min(abs(a[1] - b[1]), self.GRID_HEIGHT - abs(a[1] - b[1]))
+        return dx + dy
 
     def get_neighbors(self, position):
         neighbors = []
         for direction in DIRECTIONS:
             dx, dy = DIRECTION_VECTORS[direction]
-            new_x = position[0] + dx
-            new_y = position[1] + dy
-            if 0 <= new_x < self.GRID_WIDTH and 0 <= new_y < self.GRID_HEIGHT:
-                neighbors.append(((new_x, new_y), direction))
+            new_x = (position[0] + dx) % self.GRID_WIDTH
+            new_y = (position[1] + dy) % self.GRID_HEIGHT
+            neighbors.append(((new_x, new_y), direction))
         return neighbors
 
     def a_star(self):
@@ -154,13 +157,10 @@ class SnakeGameAI:
 
     def move_snake(self, direction):
         dx, dy = DIRECTION_VECTORS[direction]
-        new_head = (self.snake[0][0] + dx, self.snake[0][1] + dy)
-
-        # Check for collision with walls
-        if not (0 <= new_head[0] < self.GRID_WIDTH and 0 <= new_head[1] < self.GRID_HEIGHT):
-            print("Game Over! The snake hit a wall.")
-            pygame.quit()
-            sys.exit()
+        new_head = (
+            (self.snake[0][0] + dx) % self.GRID_WIDTH,
+            (self.snake[0][1] + dy) % self.GRID_HEIGHT
+        )
 
         # Collision Detection with self
         if new_head in self.snake:
