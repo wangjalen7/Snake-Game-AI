@@ -1,6 +1,8 @@
 import pygame
 import random
 import sys
+import numpy as np
+import pandas as pd
 
 # Initialize Pygame
 pygame.init()
@@ -28,7 +30,15 @@ DIRECTION_VECTORS = {
     RIGHT: (1, 0)
 }
 
-class SnakeGame:
+# Direction Labels
+DIR_LABELS = {
+    UP: 0,
+    DOWN: 1,
+    LEFT: 2,
+    RIGHT: 3
+}
+
+class SnakeGameDataCollector:
     def __init__(self, width=600, height=400):
         # Game Dimensions
         self.WINDOW_WIDTH = width
@@ -40,7 +50,7 @@ class SnakeGame:
 
         # Set up the display
         self.screen = pygame.display.set_mode((self.WINDOW_WIDTH, self.WINDOW_HEIGHT))
-        pygame.display.set_caption('Snake Game')
+        pygame.display.set_caption('Snake Game Data Collection')
 
         # Set up the clock
         self.clock = pygame.time.Clock()
@@ -51,13 +61,19 @@ class SnakeGame:
         # Game Variables
         self.reset()
 
+        # Data collection variables
+        self.data = []
+
     def reset(self):
         self.snake = [(self.GRID_WIDTH // 2, self.GRID_HEIGHT // 2)]
-        self.direction = RIGHT
+        self.direction = random.choice(DIRECTIONS)
         self.score = 0
         self.speed = 10  # Game speed in frames per second
+        self.max_steps = 1000  # Maximum steps per game to prevent infinite loops
+        self.steps = 0
         self.pellets = []
         self.spawn_pellets(2)  # Initially spawn two pellets
+        self.board = np.zeros((self.GRID_HEIGHT, self.GRID_WIDTH), dtype=int)
 
     def spawn_pellets(self, num_pellets=2):
         """
@@ -87,21 +103,22 @@ class SnakeGame:
         for y in range(0, self.WINDOW_HEIGHT, CELL_SIZE):
             pygame.draw.line(self.screen, GRAY, (0, y), (self.WINDOW_WIDTH, y))
 
+    def update_board(self):
+        self.board.fill(0)
+        for segment in self.snake[1:]:
+            self.board[segment[1], segment[0]] = 2  # Snake body
+        head = self.snake[0]
+        self.board[head[1], head[0]] = 1  # Snake head
+        for pellet in self.pellets:
+            self.board[pellet[1], pellet[0]] = 3  # Pellets
+
     def handle_events(self):
         # Event Handling
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
+                self.save_data()
                 pygame.quit()
                 sys.exit()
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_UP and self.direction != DOWN:
-                    self.direction = UP
-                elif event.key == pygame.K_DOWN and self.direction != UP:
-                    self.direction = DOWN
-                elif event.key == pygame.K_LEFT and self.direction != RIGHT:
-                    self.direction = LEFT
-                elif event.key == pygame.K_RIGHT and self.direction != LEFT:
-                    self.direction = RIGHT
 
     def move_snake(self):
         dx, dy = DIRECTION_VECTORS[self.direction]
@@ -112,9 +129,7 @@ class SnakeGame:
 
         # Collision Detection with self
         if new_head in self.snake:
-            print("Game Over! You collided with yourself.")
-            pygame.quit()
-            sys.exit()
+            return False  # Game Over
 
         self.snake.insert(0, new_head)
 
@@ -125,6 +140,8 @@ class SnakeGame:
             self.spawn_pellets(2)  # Ensure there are always two pellets
         else:
             self.snake.pop()  # Remove last segment
+
+        return True  # Continue game
 
     def draw_elements(self):
         self.screen.fill(BLACK)
@@ -140,16 +157,51 @@ class SnakeGame:
         self.screen.blit(score_text, (5, 5))
         pygame.display.flip()
 
+    def collect_data(self):
+        self.update_board()
+        state = self.board.copy()
+        action = DIR_LABELS[self.direction]
+        self.data.append({'state': state, 'action': action})
+
+    def save_data(self):
+        # Flatten the state arrays and prepare the data for saving
+        records = []
+        for entry in self.data:
+            flat_state = entry['state'].flatten()
+            record = flat_state.tolist()
+            record.append(entry['action'])
+            records.append(record)
+
+        # Create a DataFrame
+        columns = [f'cell_{i}' for i in range(self.GRID_WIDTH * self.GRID_HEIGHT)] + ['action']
+        df = pd.DataFrame(records, columns=columns)
+
+        # Save to CSV
+        df.to_csv('snake_game_data.csv', index=False)
+        print("Data saved to snake_game_data.csv")
+
     def run(self):
-        while True:
+        while self.steps < self.max_steps:
             self.clock.tick(self.speed)
             self.handle_events()
-            self.move_snake()
+            # Autonomous movement: Random direction
+            self.direction = random.choice(DIRECTIONS)
+
+            if not self.move_snake():
+                print("Game Over!")
+                break
+
+            self.collect_data()
             self.draw_elements()
+            self.steps += 1
+
+        self.save_data()
+        pygame.quit()
+        sys.exit()
 
 def main():
     # You can set the game board size here (width, height)
-    game = SnakeGame(width=800, height=600)
+    game = SnakeGameDataCollector(width=800, height=600)
     game.run()
 
 if __name__ == "__main__":
