@@ -9,13 +9,7 @@ from collections import deque
 pygame.init()
 
 # Game Constants
-WINDOW_WIDTH = 200  # Reduced size for faster training
-WINDOW_HEIGHT = 200
-CELL_SIZE = 20
-
-# Grid Dimensions
-GRID_WIDTH = WINDOW_WIDTH // CELL_SIZE
-GRID_HEIGHT = WINDOW_HEIGHT // CELL_SIZE
+CELL_SIZE = 20  # Cell size remains constant
 
 # Colors
 WHITE = (255, 255, 255)
@@ -42,38 +36,53 @@ RIGHT_TURN = 1
 LEFT_TURN = 2
 
 class SnakeGameRL:
-    def __init__(self, render=False):
+    def __init__(self, width=200, height=200, render=False):
+        self.WINDOW_WIDTH = width
+        self.WINDOW_HEIGHT = height
+
+        # Grid Dimensions
+        self.GRID_WIDTH = self.WINDOW_WIDTH // CELL_SIZE
+        self.GRID_HEIGHT = self.WINDOW_HEIGHT // CELL_SIZE
+
         self.render_game = render
         if self.render_game:
-            self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
+            self.screen = pygame.display.set_mode((self.WINDOW_WIDTH, self.WINDOW_HEIGHT))
             pygame.display.set_caption('Snake RL Agent')
             self.clock = pygame.time.Clock()
             self.font = pygame.font.SysFont('Arial', 24)
         self.reset()
 
     def reset(self):
-        self.snake = [(GRID_WIDTH // 2, GRID_HEIGHT // 2)]
+        self.snake = [(self.GRID_WIDTH // 2, self.GRID_HEIGHT // 2)]
         self.direction = random.choice([UP, DOWN, LEFT, RIGHT])
-        self.place_pellet()
         self.score = 0
         self.frame = 0
         self.steps_since_last_pellet = 0
+        self.pellets = []
+        self.spawn_pellets(2)  # Initially spawn two pellets
         return self.get_state()
 
-    def place_pellet(self):
-        while True:
-            self.pellet = (
-                random.randint(0, GRID_WIDTH - 1),
-                random.randint(0, GRID_HEIGHT - 1)
+    def spawn_pellets(self, num_pellets=2):
+        """
+        Ensures that there are always 'num_pellets' pellets on the board.
+        Adds new pellets without removing existing ones.
+        """
+        while len(self.pellets) < num_pellets:
+            pellet = (
+                random.randint(0, self.GRID_WIDTH - 1),
+                random.randint(0, self.GRID_HEIGHT - 1)
             )
-            if self.pellet not in self.snake:
-                break
+            if pellet not in self.snake and pellet not in self.pellets:
+                self.pellets.append(pellet)
 
     def get_state(self):
         head = self.snake[0]
         dir_vector = DIRECTION_VECTORS[self.direction]
         left_dir = DIRECTION_VECTORS[(self.direction - 1) % 4]
         right_dir = DIRECTION_VECTORS[(self.direction + 1) % 4]
+
+        # Find the closest pellet
+        closest_pellet = min(self.pellets, key=lambda p: self.manhattan_distance(head, p))
 
         state = [
             # Danger straight
@@ -83,28 +92,31 @@ class SnakeGameRL:
             # Danger left
             self.is_collision(head, left_dir),
             # Move direction
-            dir_vector == DIRECTION_VECTORS[UP],
-            dir_vector == DIRECTION_VECTORS[DOWN],
-            dir_vector == DIRECTION_VECTORS[LEFT],
-            dir_vector == DIRECTION_VECTORS[RIGHT],
-            # Food location
-            self.pellet[0] < head[0],  # Food left
-            self.pellet[0] > head[0],  # Food right
-            self.pellet[1] < head[1],  # Food up
-            self.pellet[1] > head[1]   # Food down
+            self.direction == UP,
+            self.direction == DOWN,
+            self.direction == LEFT,
+            self.direction == RIGHT,
+            # Food location relative to head
+            closest_pellet[0] < head[0],  # Food left
+            closest_pellet[0] > head[0],  # Food right
+            closest_pellet[1] < head[1],  # Food up
+            closest_pellet[1] > head[1]   # Food down
         ]
         return np.array(state, dtype=int)
 
     def is_collision(self, position, direction):
         x, y = position
         dx, dy = direction
-        new_x = x + dx
-        new_y = y + dy
-        if not (0 <= new_x < GRID_WIDTH and 0 <= new_y < GRID_HEIGHT):
-            return True
+        new_x = (x + dx) % self.GRID_WIDTH
+        new_y = (y + dy) % self.GRID_HEIGHT
         if (new_x, new_y) in self.snake[1:]:
             return True
         return False
+
+    def manhattan_distance(self, a, b):
+        dx = min(abs(a[0] - b[0]), self.GRID_WIDTH - abs(a[0] - b[0]))
+        dy = min(abs(a[1] - b[1]), self.GRID_HEIGHT - abs(a[1] - b[1]))
+        return dx + dy
 
     def step(self, action):
         self.frame += 1
@@ -118,7 +130,10 @@ class SnakeGameRL:
             self.direction = (self.direction - 1) % 4
 
         dx, dy = DIRECTION_VECTORS[self.direction]
-        new_head = (self.snake[0][0] + dx, self.snake[0][1] + dy)
+        new_head = (
+            (self.snake[0][0] + dx) % self.GRID_WIDTH,
+            (self.snake[0][1] + dy) % self.GRID_HEIGHT
+        )
 
         # Check for collision
         reward = 0
@@ -130,10 +145,11 @@ class SnakeGameRL:
 
         # Move snake
         self.snake.insert(0, new_head)
-        if new_head == self.pellet:
+        if new_head in self.pellets:
             self.score += 1
             reward = 10
-            self.place_pellet()
+            self.pellets.remove(new_head)
+            self.spawn_pellets(2)  # Ensure there are always two pellets
             self.steps_since_last_pellet = 0
         else:
             self.snake.pop()
@@ -154,9 +170,10 @@ class SnakeGameRL:
             rect = pygame.Rect(segment[0] * CELL_SIZE, segment[1] * CELL_SIZE, CELL_SIZE, CELL_SIZE)
             pygame.draw.rect(self.screen, GREEN, rect)
 
-        # Draw pellet
-        pellet_rect = pygame.Rect(self.pellet[0] * CELL_SIZE, self.pellet[1] * CELL_SIZE, CELL_SIZE, CELL_SIZE)
-        pygame.draw.rect(self.screen, RED, pellet_rect)
+        # Draw pellets
+        for pellet in self.pellets:
+            pellet_rect = pygame.Rect(pellet[0] * CELL_SIZE, pellet[1] * CELL_SIZE, CELL_SIZE, CELL_SIZE)
+            pygame.draw.rect(self.screen, RED, pellet_rect)
 
         # Draw score
         score_text = self.font.render(f"Score: {self.score}", True, WHITE)
@@ -232,7 +249,7 @@ class Agent:
             self.epsilon *= self.epsilon_decay
 
 def main():
-    game = SnakeGameRL(render=True)  # Set render=True to visualize
+    game = SnakeGameRL(width=200, height=200, render=False)  # Set render=True to visualize
     agent = Agent()
     episodes = 1000
     scores = []
@@ -282,6 +299,41 @@ def main():
 
     pygame.quit()
 
+    # Plot the scores
+    import matplotlib.pyplot as plt
+
+    # Plot Scores
+    plt.figure(figsize=(12,5))
+    plt.subplot(1,2,1)
+    plt.plot(scores)
+    plt.xlabel('Episode')
+    plt.ylabel('Score')
+    plt.title('Score over Episodes')
+
+    # Plot Survival Times
+    plt.subplot(1,2,2)
+    plt.plot(survival_times)
+    plt.xlabel('Episode')
+    plt.ylabel('Survival Time (Steps)')
+    plt.title('Survival Time over Episodes')
+    plt.tight_layout()
+    plt.show()
+
+    # Plot Losses
+    plt.figure()
+    plt.plot(losses)
+    plt.xlabel('Episode')
+    plt.ylabel('Loss')
+    plt.title('Training Loss over Episodes')
+    plt.show()
+
+    # Plot Epsilon
+    plt.figure()
+    plt.plot(epsilons)
+    plt.xlabel('Episode')
+    plt.ylabel('Epsilon')
+    plt.title('Epsilon over Episodes')
+    plt.show()
 
     # Save the model
     agent.model.save('snake_dqn_model.h5')
