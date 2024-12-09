@@ -197,7 +197,7 @@ class SnakeGameAI:
 
 def main():
     # You can set the game board size here (width, height)
-    game = SnakeGameAI(width=800, height=600)
+    game = SnakeGameAI(width=200, height=200)
     game.run()
 
 if __name__ == "__main__":

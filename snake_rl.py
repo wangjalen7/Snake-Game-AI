@@ -1,17 +1,19 @@
+# snake_rl.py
+
 import pygame
 import random
 import sys
 import numpy as np
-import tensorflow as tf
 from collections import deque
+import tensorflow as tf
+from keras import layers, models
+import math
 
 # Initialize Pygame
 pygame.init()
 
-# Game Constants
-CELL_SIZE = 20  # Cell size remains constant
+CELL_SIZE = 20
 
-# Colors
 WHITE = (255, 255, 255)
 GRAY = (40, 40, 40)
 BLACK = (0, 0, 0)
@@ -23,6 +25,7 @@ UP = 0
 DOWN = 1
 LEFT = 2
 RIGHT = 3
+DIRECTIONS = [UP, DOWN, LEFT, RIGHT]
 DIRECTION_VECTORS = {
     UP: (0, -1),
     DOWN: (0, 1),
@@ -30,7 +33,7 @@ DIRECTION_VECTORS = {
     RIGHT: (1, 0)
 }
 
-# Action Constants
+# Actions
 STRAIGHT = 0
 RIGHT_TURN = 1
 LEFT_TURN = 2
@@ -39,8 +42,6 @@ class SnakeGameRL:
     def __init__(self, width=200, height=200, render=False):
         self.WINDOW_WIDTH = width
         self.WINDOW_HEIGHT = height
-
-        # Grid Dimensions
         self.GRID_WIDTH = self.WINDOW_WIDTH // CELL_SIZE
         self.GRID_HEIGHT = self.WINDOW_HEIGHT // CELL_SIZE
 
@@ -56,17 +57,13 @@ class SnakeGameRL:
         self.snake = [(self.GRID_WIDTH // 2, self.GRID_HEIGHT // 2)]
         self.direction = random.choice([UP, DOWN, LEFT, RIGHT])
         self.score = 0
-        self.frame = 0
         self.steps_since_last_pellet = 0
+        self.total_steps = 0
         self.pellets = []
-        self.spawn_pellets(2)  # Initially spawn two pellets
+        self.spawn_pellets(2)
         return self.get_state()
 
     def spawn_pellets(self, num_pellets=2):
-        """
-        Ensures that there are always 'num_pellets' pellets on the board.
-        Adds new pellets without removing existing ones.
-        """
         while len(self.pellets) < num_pellets:
             pellet = (
                 random.randint(0, self.GRID_WIDTH - 1),
@@ -75,34 +72,34 @@ class SnakeGameRL:
             if pellet not in self.snake and pellet not in self.pellets:
                 self.pellets.append(pellet)
 
-    def get_state(self):
-        head = self.snake[0]
-        dir_vector = DIRECTION_VECTORS[self.direction]
-        left_dir = DIRECTION_VECTORS[(self.direction - 1) % 4]
-        right_dir = DIRECTION_VECTORS[(self.direction + 1) % 4]
+    def manhattan_distance(self, a, b):
+        dx = min(abs(a[0] - b[0]), self.GRID_WIDTH - abs(a[0] - b[0]))
+        dy = min(abs(a[1] - b[1]), self.GRID_HEIGHT - abs(a[1] - b[1]))
+        return dx + dy
 
-        # Find the closest pellet
-        closest_pellet = min(self.pellets, key=lambda p: self.manhattan_distance(head, p))
+    def bfs_shortest_path_to_pellet(self):
+        if not self.pellets:
+            return 0
+        start = self.snake[0]
+        goals = set(self.pellets)
+        obstacles = set(self.snake[1:])
 
-        state = [
-            # Danger straight
-            self.is_collision(head, dir_vector),
-            # Danger right
-            self.is_collision(head, right_dir),
-            # Danger left
-            self.is_collision(head, left_dir),
-            # Move direction
-            self.direction == UP,
-            self.direction == DOWN,
-            self.direction == LEFT,
-            self.direction == RIGHT,
-            # Food location relative to head
-            closest_pellet[0] < head[0],  # Food left
-            closest_pellet[0] > head[0],  # Food right
-            closest_pellet[1] < head[1],  # Food up
-            closest_pellet[1] > head[1]   # Food down
-        ]
-        return np.array(state, dtype=int)
+        queue = deque()
+        queue.append((start, 0))
+        visited = set([start])
+        while queue:
+            current, dist = queue.popleft()
+            if current in goals:
+                return dist
+            for d in DIRECTIONS:
+                dx, dy = DIRECTION_VECTORS[d]
+                nx = (current[0] + dx) % self.GRID_WIDTH
+                ny = (current[1] + dy) % self.GRID_HEIGHT
+                next_pos = (nx, ny)
+                if next_pos not in visited and next_pos not in obstacles:
+                    visited.add(next_pos)
+                    queue.append((next_pos, dist+1))
+        return max(self.GRID_WIDTH, self.GRID_HEIGHT)  # Large penalty if no path
 
     def is_collision(self, position, direction):
         x, y = position
@@ -113,17 +110,35 @@ class SnakeGameRL:
             return True
         return False
 
-    def manhattan_distance(self, a, b):
-        dx = min(abs(a[0] - b[0]), self.GRID_WIDTH - abs(a[0] - b[0]))
-        dy = min(abs(a[1] - b[1]), self.GRID_HEIGHT - abs(a[1] - b[1]))
-        return dx + dy
+    def get_state(self):
+        head = self.snake[0]
+        dir_vector = DIRECTION_VECTORS[self.direction]
+        left_dir = DIRECTION_VECTORS[(self.direction - 1) % 4]
+        right_dir = DIRECTION_VECTORS[(self.direction + 1) % 4]
+
+        closest_pellet = min(self.pellets, key=lambda p: self.manhattan_distance(head, p))
+
+        state = [
+            int(self.is_collision(head, dir_vector)),   # Danger straight
+            int(self.is_collision(head, right_dir)),    # Danger right
+            int(self.is_collision(head, left_dir)),     # Danger left
+            int(self.direction == UP),
+            int(self.direction == DOWN),
+            int(self.direction == LEFT),
+            int(self.direction == RIGHT),
+            int(closest_pellet[0] < head[0]),  # Food left
+            int(closest_pellet[0] > head[0]),  # Food right
+            int(closest_pellet[1] < head[1]),  # Food up
+            int(closest_pellet[1] > head[1])   # Food down
+        ]
+        return np.array(state, dtype=int)
 
     def step(self, action):
-        self.frame += 1
-        self.steps_since_last_pellet += 1
-        # Update the direction based on action
+        self.total_steps += 1
+        old_distance = self.bfs_shortest_path_to_pellet()
+
         if action == STRAIGHT:
-            pass  # Keep current direction
+            pass
         elif action == RIGHT_TURN:
             self.direction = (self.direction + 1) % 4
         elif action == LEFT_TURN:
@@ -135,30 +150,38 @@ class SnakeGameRL:
             (self.snake[0][1] + dy) % self.GRID_HEIGHT
         )
 
-        # Check for collision
-        reward = 0
         done = False
-        if self.is_collision(self.snake[0], DIRECTION_VECTORS[self.direction]):
+        reward = 0
+
+        if new_head in self.snake[1:]:
             reward = -10
             done = True
             return self.get_state(), reward, done, self.score
 
-        # Move snake
         self.snake.insert(0, new_head)
         if new_head in self.pellets:
             self.score += 1
-            reward = 10
+            reward += 10
             self.pellets.remove(new_head)
-            self.spawn_pellets(2)  # Ensure there are always two pellets
+            self.spawn_pellets(2)
             self.steps_since_last_pellet = 0
         else:
             self.snake.pop()
-            reward = 0  # No reward for just moving
+            reward -= 0.01
 
-        # Optional: Add a limit to the number of frames without eating
-        if self.steps_since_last_pellet > 100:
+        self.steps_since_last_pellet += 1
+        # End episode if too long without eating
+        if self.steps_since_last_pellet > (self.GRID_WIDTH * self.GRID_HEIGHT):
+            reward -= 5
             done = True
-            reward = -10  # Penalty for taking too long
+
+        new_distance = self.bfs_shortest_path_to_pellet()
+        if new_distance < old_distance:
+            reward += 0.1
+        elif new_distance > old_distance:
+            reward -= 0.05
+
+        reward += 0.001  # Small survival reward
 
         return self.get_state(), reward, done, self.score
 
@@ -167,177 +190,230 @@ class SnakeGameRL:
             return
         self.screen.fill(BLACK)
         for segment in self.snake:
-            rect = pygame.Rect(segment[0] * CELL_SIZE, segment[1] * CELL_SIZE, CELL_SIZE, CELL_SIZE)
+            rect = pygame.Rect(segment[0]*CELL_SIZE, segment[1]*CELL_SIZE, CELL_SIZE, CELL_SIZE)
             pygame.draw.rect(self.screen, GREEN, rect)
 
-        # Draw pellets
         for pellet in self.pellets:
-            pellet_rect = pygame.Rect(pellet[0] * CELL_SIZE, pellet[1] * CELL_SIZE, CELL_SIZE, CELL_SIZE)
+            pellet_rect = pygame.Rect(pellet[0]*CELL_SIZE, pellet[1]*CELL_SIZE, CELL_SIZE, CELL_SIZE)
             pygame.draw.rect(self.screen, RED, pellet_rect)
 
-        # Draw score
         score_text = self.font.render(f"Score: {self.score}", True, WHITE)
-        self.screen.blit(score_text, (5, 5))
+        self.screen.blit(score_text, (5,5))
 
         pygame.display.flip()
-        self.clock.tick(15)  # Limit to 15 FPS
+        self.clock.tick(20)
 
-class Agent:
-    def __init__(self):
-        self.state_size = 11
-        self.action_size = 3  # [straight, right turn, left turn]
-        self.memory = deque(maxlen=100000)
-        self.gamma = 0.99  # Discount rate
-        self.epsilon = 1.0  # Exploration rate
+
+class PrioritizedReplayBuffer:
+    def __init__(self, capacity, alpha=0.6):
+        self.capacity = capacity
+        self.alpha = alpha
+        self.buffer = []
+        self.position = 0
+        self.priorities = np.zeros((capacity,), dtype=np.float32)
+        self.epsilon = 1e-5
+
+    def add(self, transition, td_error):
+        max_priority = self.priorities.max() if self.buffer else 1.0
+        if len(self.buffer) < self.capacity:
+            self.buffer.append(transition)
+        else:
+            self.buffer[self.position] = transition
+        self.priorities[self.position] = max(max_priority, td_error + self.epsilon)
+        self.position = (self.position + 1) % self.capacity
+
+    def sample(self, batch_size, beta=0.4):
+        if len(self.buffer) == self.capacity:
+            priorities = self.priorities
+        else:
+            priorities = self.priorities[:len(self.buffer)]
+
+        probs = priorities ** self.alpha
+        probs /= probs.sum()
+
+        indices = np.random.choice(len(self.buffer), batch_size, p=probs)
+        samples = [self.buffer[i] for i in indices]
+        weights = (len(self.buffer) * probs[indices]) ** (-beta)
+        weights /= weights.max()
+        return samples, indices, weights
+
+    def update_priorities(self, indices, td_errors):
+        for i, td_error in zip(indices, td_errors):
+            self.priorities[i] = td_error + self.epsilon
+
+
+def build_dueling_dqn(state_size, action_size, learning_rate):
+    inputs = layers.Input(shape=(state_size,))
+    x = layers.Dense(256, activation='relu')(inputs)
+    x = layers.Dense(256, activation='relu')(x)
+    x = layers.Dense(128, activation='relu')(x)
+    x = layers.Dense(128, activation='relu')(x)
+
+    value = layers.Dense(1, activation=None)(x)
+    advantage = layers.Dense(action_size, activation=None)(x)
+
+    average_advantage = layers.Lambda(
+        lambda a: tf.reduce_mean(a, axis=1, keepdims=True),
+        output_shape=(1,)
+    )(advantage)
+
+    advantage_minus_avg = layers.Subtract()([advantage, average_advantage])
+    q_values = layers.Add()([value, advantage_minus_avg])
+
+    model = models.Model(inputs=inputs, outputs=q_values)
+    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate), loss='mse')
+    return model
+
+
+class DQNAgent:
+    def __init__(self, state_size=11, action_size=3, capacity=100000):
+        self.state_size = state_size
+        self.action_size = action_size
+        self.memory = PrioritizedReplayBuffer(capacity)
+        self.gamma = 0.99
+        self.epsilon = 1.0
         self.epsilon_min = 0.01
         self.epsilon_decay = 0.995
-        self.learning_rate = 0.001
-        self.model = self._build_model()
-        self.target_model = self._build_model()
-        self.update_target_model()
+        self.learning_rate = 0.0005
         self.batch_size = 64
-        self.train_start = 1000  # Start training after some experiences
-        self.steps = 0  # Total steps taken
-
-    def _build_model(self):
-        model = tf.keras.Sequential([
-            tf.keras.layers.Dense(128, input_dim=self.state_size, activation='relu'),
-            tf.keras.layers.Dense(128, activation='relu'),
-            tf.keras.layers.Dense(self.action_size, activation='linear')
-        ])
-        model.compile(loss='mse', optimizer=tf.keras.optimizers.Adam(lr=self.learning_rate))
-        return model
+        self.train_start = 1000
+        self.model = build_dueling_dqn(self.state_size, self.action_size, self.learning_rate)
+        self.target_model = build_dueling_dqn(self.state_size, self.action_size, self.learning_rate)
+        self.update_target_model()
+        self.beta = 0.4
+        self.beta_increment_per_sampling = 0.001
+        self.steps = 0
 
     def update_target_model(self):
         self.target_model.set_weights(self.model.get_weights())
 
     def act(self, state):
-        if np.random.rand() <= self.epsilon:
+        if np.random.rand() < self.epsilon:
             return random.randrange(self.action_size)
-        act_values = self.model.predict(np.reshape(state, [1, self.state_size]))
-        return np.argmax(act_values[0])  # Returns action with highest Q-value
+        q_values = self.model.predict(state[np.newaxis, :], verbose=0)
+        return np.argmax(q_values[0])
 
     def remember(self, state, action, reward, next_state, done):
-        self.memory.append((state, action, reward, next_state, done))
+        td_error = abs(reward)
+        self.memory.add((state, action, reward, next_state, done), td_error)
         self.steps += 1
 
     def replay(self):
-        if len(self.memory) < self.train_start:
-            return None
-        minibatch = random.sample(self.memory, min(len(self.memory), self.batch_size))
+        if self.steps < self.train_start or len(self.memory.buffer) < self.batch_size:
+            return
 
-        states = np.array([sample[0] for sample in minibatch])
-        actions = np.array([sample[1] for sample in minibatch])
-        rewards = np.array([sample[2] for sample in minibatch])
-        next_states = np.array([sample[3] for sample in minibatch])
-        dones = np.array([sample[4] for sample in minibatch])
+        self.beta = min(1.0, self.beta + self.beta_increment_per_sampling)
 
-        target = self.model.predict(states)
-        target_next = self.target_model.predict(next_states)
+        samples, indices, weights = self.memory.sample(self.batch_size, self.beta)
+        states = np.array([sample[0] for sample in samples])
+        actions = np.array([sample[1] for sample in samples])
+        rewards = np.array([sample[2] for sample in samples])
+        next_states = np.array([sample[3] for sample in samples])
+        dones = np.array([sample[4] for sample in samples])
 
-        for i in range(len(minibatch)):
+        target = self.model.predict(states, verbose=0)
+        target_next = self.model.predict(next_states, verbose=0)
+        target_val = self.target_model.predict(next_states, verbose=0)
+
+        td_errors = np.zeros((self.batch_size,), dtype=np.float32)
+
+        for i in range(len(samples)):
             if dones[i]:
-                target[i][actions[i]] = rewards[i]
+                td_target = rewards[i]
             else:
-                target[i][actions[i]] = rewards[i] + self.gamma * np.amax(target_next[i])
+                best_action = np.argmax(target_next[i])
+                td_target = rewards[i] + self.gamma * target_val[i][best_action]
 
-        history = self.model.fit(states, target, epochs=1, verbose=0)
-        return history.history['loss'][0]
+            td_errors[i] = abs(td_target - target[i][actions[i]])
+            target[i][actions[i]] = td_target
 
-    def decay_epsilon(self):
+        self.memory.update_priorities(indices, td_errors)
+        self.model.fit(states, target, sample_weight=weights, epochs=1, verbose=0)
+
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
 
+
+def evaluate_agent(agent, env, eval_episodes=10):
+    old_epsilon = agent.epsilon
+    agent.epsilon = 0.0
+    total_score = 0
+    for i in range(eval_episodes):
+        state = env.reset()
+        done = False
+        episode_score = 0
+        step_count = 0
+        # Safety break in evaluation too
+        max_eval_steps = 500
+        while not done:
+            step_count += 1
+            if step_count > max_eval_steps:
+                print("Evaluation episode forced to end due to step limit.")
+                done = True
+                break
+
+            action = agent.act(state)
+            state, reward, done, score = env.step(action)
+            episode_score = score
+        total_score += episode_score
+    agent.epsilon = old_epsilon
+    return total_score / eval_episodes
+
+
 def main():
-    game = SnakeGameRL(width=200, height=200, render=False)  # Set render=True to visualize
-    agent = Agent()
-    episodes = 1000
-    scores = []
-    survival_times = []
-    losses = []
-    epsilons = []
+    print("Starting training...")
+    game = SnakeGameRL(width=200, height=200, render=False)
+    agent = DQNAgent()
+    episodes = 3000
+    eval_interval = 100
+    eval_episodes = 10
+    best_eval_score = -float('inf')
+
+    max_episode_steps = 1000
+
     for e in range(episodes):
+        print(f"Starting Episode {e+1}/{episodes}")
         state = game.reset()
         done = False
-        total_reward = 0
-        total_loss = 0
-        steps = 0
+        episode_score = 0
+        episode_step_count = 0
 
         while not done:
-            game.render()
+            episode_step_count += 1
+            if episode_step_count % 100 == 0:
+                print(f"Episode {e+1}, Step {episode_step_count}...")
+
+            if episode_step_count > max_episode_steps:
+                print("Forcing episode to end due to max step limit.")
+                done = True
+                break
+
             action = agent.act(state)
             next_state, reward, done, score = game.step(action)
             agent.remember(state, action, reward, next_state, done)
-            loss = agent.replay()
+            agent.replay()
             state = next_state
-            total_reward += reward
-            steps += 1
-
-            if loss is not None:
-                total_loss += loss
-
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    pygame.quit()
-                    sys.exit()
+            episode_score = score
 
             if agent.steps % 1000 == 0:
+                print("Updating target model...")
                 agent.update_target_model()
 
-        agent.decay_epsilon()
+        # Periodically evaluate
+        if (e + 1) % eval_interval == 0:
+            avg_eval_score = evaluate_agent(agent, game, eval_episodes)
+            print(f"Episode {e+1}, Evaluation Average Score: {avg_eval_score:.2f}")
+            if avg_eval_score > best_eval_score:
+                best_eval_score = avg_eval_score
+                agent.model.save('best_snake_model.h5')
+                print(f"New best model saved with Avg Eval Score: {avg_eval_score:.2f}")
 
-        # Collect metrics
-        scores.append(score)
-        survival_times.append(steps)
-        epsilons.append(agent.epsilon)
-        if total_loss > 0:
-            losses.append(total_loss / steps)
-        else:
-            losses.append(0)
-
-        print(f"Episode {e+1}/{episodes}, Score: {score}, Steps: {steps}, Epsilon: {agent.epsilon:.4f}, Loss: {losses[-1]:.4f}")
+        if (e + 1) % 100 == 0:
+            print(f"Episode: {e+1}/{episodes}, Current Score: {episode_score}, Epsilon: {agent.epsilon:.4f}, Best Eval Score: {best_eval_score:.2f}")
 
     pygame.quit()
+    print(f"Training complete. Best evaluation score achieved: {best_eval_score:.2f}")
 
-    # Plot the scores
-    import matplotlib.pyplot as plt
-
-    # Plot Scores
-    plt.figure(figsize=(12,5))
-    plt.subplot(1,2,1)
-    plt.plot(scores)
-    plt.xlabel('Episode')
-    plt.ylabel('Score')
-    plt.title('Score over Episodes')
-
-    # Plot Survival Times
-    plt.subplot(1,2,2)
-    plt.plot(survival_times)
-    plt.xlabel('Episode')
-    plt.ylabel('Survival Time (Steps)')
-    plt.title('Survival Time over Episodes')
-    plt.tight_layout()
-    plt.show()
-
-    # Plot Losses
-    plt.figure()
-    plt.plot(losses)
-    plt.xlabel('Episode')
-    plt.ylabel('Loss')
-    plt.title('Training Loss over Episodes')
-    plt.show()
-
-    # Plot Epsilon
-    plt.figure()
-    plt.plot(epsilons)
-    plt.xlabel('Episode')
-    plt.ylabel('Epsilon')
-    plt.title('Epsilon over Episodes')
-    plt.show()
-
-    # Save the model
-    agent.model.save('snake_dqn_model.h5')
-    print("Model saved as snake_dqn_model.h5")
 
 if __name__ == "__main__":
     main()
