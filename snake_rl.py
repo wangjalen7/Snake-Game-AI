@@ -251,7 +251,7 @@ def build_dueling_dqn(state_size, action_size, learning_rate):
 
     value = layers.Dense(1, activation=None)(x)
     advantage = layers.Dense(action_size, activation=None)(x)
-
+    
     average_advantage = layers.Lambda(
         lambda a: tf.reduce_mean(a, axis=1, keepdims=True),
         output_shape=(1,)
@@ -311,6 +311,9 @@ class DQNAgent:
         next_states = np.array([sample[3] for sample in samples])
         dones = np.array([sample[4] for sample in samples])
 
+        states = states.reshape((self.batch_size, self.state_size))  # Reshape states to (batch_size, state_size)
+        next_states = next_states.reshape((self.batch_size, self.state_size))  # Same for next_states
+
         target = self.model.predict(states, verbose=0)
         target_next = self.model.predict(next_states, verbose=0)
         target_val = self.target_model.predict(next_states, verbose=0)
@@ -323,15 +326,11 @@ class DQNAgent:
             else:
                 best_action = np.argmax(target_next[i])
                 td_target = rewards[i] + self.gamma * target_val[i][best_action]
-
-            td_errors[i] = abs(td_target - target[i][actions[i]])
+            td_errors[i] = td_target - target[i][actions[i]]
             target[i][actions[i]] = td_target
 
+        self.model.fit(states, target, sample_weight=weights, verbose=0)
         self.memory.update_priorities(indices, td_errors)
-        self.model.fit(states, target, sample_weight=weights, epochs=1, verbose=0)
-
-        if self.epsilon > self.epsilon_min:
-            self.epsilon *= self.epsilon_decay
 
 
 def evaluate_agent(agent, env, eval_episodes=10):

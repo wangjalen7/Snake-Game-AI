@@ -3,6 +3,7 @@ import random
 import sys
 import numpy as np
 import tensorflow as tf
+import keras
 from collections import deque
 
 # Initialize Pygame
@@ -191,19 +192,34 @@ class Agent:
     def load_model(self, model_path):
         """Load the trained model for inference."""
         try:
-            self.model = tf.keras.models.load_model(model_path, compile=False)
+            self.model = tf.keras.models.load_model(
+                model_path, 
+                custom_objects={
+                    "tf": tf,
+                    "mse": tf.keras.losses.MeanSquaredError(),  # Ensure that 'mse' is recognized correctly
+                    "Adam": tf.keras.optimizers.Adam  # Ensure the optimizer is loaded correctly
+                }
+            )
             print(f"Model loaded successfully from {model_path}")
         except Exception as e:
             print(f"Error loading model: {e}")
             raise
+
 
     def act(self, state):
         """Use the trained model to predict the best action."""
         if self.model is None:
             raise ValueError("Model has not been loaded. Use the 'load_model' method first.")
         state = np.reshape(state, [1, self.state_size])
-        action_values = self.model.predict(state, verbose=0)  # Predict action values
-        return np.argmax(action_values[0])  # Choose the action with the highest Q-value
+        print(f"State shape: {state.shape}")
+        # keras.config.disable_traceback_filtering()
+        try:
+            action_values = self.model.predict(state, verbose=0)  # Predict action values
+            print(f"Action values: {action_values}")
+            return np.argmax(action_values[0])  # Choose the action with the highest Q-value
+        except Exception as e:
+            print(f"Error during prediction: {e}")
+            raise
 
 def main():
     # Initialize the game and agent
@@ -211,7 +227,8 @@ def main():
     agent = Agent(state_size=11, action_size=6)
 
     # Load the trained model
-    model_path = 'snake_dqn_model.h5'  # Replace with the path to your .h5 file
+    # model_path = 'snake_dqn_model.h5'  # Is for the old rl model
+    model_path = 'best_snake_model.h5'
     try:
         agent.load_model(model_path)
     except Exception as e:
