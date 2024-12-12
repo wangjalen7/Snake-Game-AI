@@ -30,6 +30,7 @@ DIRECTION_VECTORS = {
     RIGHT: (1, 0)
 }
 
+
 class SnakeGameAI:
     def __init__(self, width=600, height=400):
         # Game Dimensions
@@ -195,10 +196,12 @@ class SnakeGameAI:
             self.move_snake(direction)
             self.draw_elements()
 
+
 def main():
     # You can set the game board size here (width, height)
     game = SnakeGameAI(width=200, height=200)
     game.run()
+
 
 if __name__ == "__main__":
     main()

@@ -38,6 +38,7 @@ DIR_LABELS = {
     RIGHT: 3
 }
 
+
 class SnakeGameDataCollector:
     def __init__(self, width=600, height=400):
         # Game Dimensions
@@ -199,10 +200,12 @@ class SnakeGameDataCollector:
         pygame.quit()
         sys.exit()
 
+
 def main():
     # You can set the game board size here (width, height)
     game = SnakeGameDataCollector(width=800, height=600)
     game.run()
+
 
 if __name__ == "__main__":
     main()

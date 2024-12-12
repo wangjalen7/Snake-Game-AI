@@ -28,6 +28,7 @@ DIRECTION_VECTORS = {
     RIGHT: (1, 0)
 }
 
+
 class SnakeGame:
     def __init__(self, width=600, height=400):
         # Game Dimensions
@@ -147,10 +148,12 @@ class SnakeGame:
             self.move_snake()
             self.draw_elements()
 
+
 def main():
     # You can set the game board size here (width, height)
     game = SnakeGame(width=800, height=600)
     game.run()
+
 
 if __name__ == "__main__":
     main()
