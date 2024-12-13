@@ -2,12 +2,10 @@
 
 import pygame
 import random
-import sys
 import numpy as np
 from collections import deque
 import tensorflow as tf
 from keras import layers, models
-import math
 
 # Initialize Pygame
 pygame.init()
@@ -228,9 +226,15 @@ class PrioritizedReplayBuffer:
         else:
             priorities = self.priorities[:len(self.buffer)]
 
-        probs = priorities ** self.alpha
-        probs /= probs.sum()
+        probs = (priorities + 1e-6) ** self.alpha
+        probs = np.nan_to_num(probs, nan=0.0, posinf=0.0, neginf=0.0)  # Fix invalid values
+        probs = np.clip(probs, 0, None)  # Ensure non-negative values
+        if np.sum(probs) == 0:
+            probs = np.ones(len(self.buffer)) / len(self.buffer)  # Fallback to uniform distribution
+        else:
+            probs /= np.sum(probs)  # Normalize probabilities
 
+        # Now proceed with sampling
         indices = np.random.choice(len(self.buffer), batch_size, p=probs)
         samples = [self.buffer[i] for i in indices]
         weights = (len(self.buffer) * probs[indices]) ** (-beta)
@@ -251,14 +255,13 @@ def build_dueling_dqn(state_size, action_size, learning_rate):
 
     value = layers.Dense(1, activation=None)(x)
     advantage = layers.Dense(action_size, activation=None)(x)
-    
-    average_advantage = layers.Lambda(
-        lambda a: tf.reduce_mean(a, axis=1, keepdims=True),
-        output_shape=(1,)
-    )(advantage)
 
-    advantage_minus_avg = layers.Subtract()([advantage, average_advantage])
-    q_values = layers.Add()([value, advantage_minus_avg])
+    # Calculate average advantage manually without a Lambda layer
+    average_advantage = tf.reduce_mean(advantage, axis=1, keepdims=True)
+    advantage_minus_avg = advantage - average_advantage
+
+    # Calculate Q-values
+    q_values = value + advantage_minus_avg
 
     model = models.Model(inputs=inputs, outputs=q_values)
     model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate), loss='mse')
@@ -275,7 +278,7 @@ class DQNAgent:
         self.epsilon_min = 0.01
         self.epsilon_decay = 0.995
         self.learning_rate = 0.0005
-        self.batch_size = 64
+        self.batch_size = 32
         self.train_start = 1000
         self.model = build_dueling_dqn(self.state_size, self.action_size, self.learning_rate)
         self.target_model = build_dueling_dqn(self.state_size, self.action_size, self.learning_rate)
@@ -363,7 +366,7 @@ def main():
     print("Starting training...")
     game = SnakeGameRL(width=200, height=200, render=False)
     agent = DQNAgent()
-    episodes = 3000
+    episodes = 500
     eval_interval = 100
     eval_episodes = 10
     best_eval_score = -float('inf')
