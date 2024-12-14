@@ -368,7 +368,7 @@ def main():
     print("Starting training...")
     game = SnakeGameRL(width=200, height=200, render=False)
     agent = DQNAgent()
-    episodes = 2000
+    episodes = 1500
     eval_interval = 100
     eval_episodes = 10
     best_eval_score = -float('inf')

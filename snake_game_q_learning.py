@@ -114,7 +114,7 @@ class SnakeGame:
         self.snake.insert(0, new_head)
         if new_head == self.pellet:
             self.score += 1
-            reward = 10
+            reward = 100
             self.pellet = self.spawn_pellet()
         else:
             self.snake.pop()
@@ -275,7 +275,7 @@ def main():
     play_game(agent, game)
 
     # Quit Pygame after game has finished
-    # pygame.quit()
+    pygame.quit()
     print("Game over. Pygame quit.")
 
 
