@@ -193,22 +193,17 @@ def play_game(agent, game):
                 pygame.quit()
                 return  # Exit the game if the window is closed
 
-        action = np.argmax([agent.get_q_value(state, a) for a in range(agent.action_size)])
+        action = agent.choose_action(state)
         state, _, done, _ = game.step(action)
         game.render()
     print(f"Game over! Final score: {game.score}")
 
 
-def main():
-    print("Starting Q-Learning training...")
-    game = SnakeGame(width=200, height=200, render=True)
-    agent = QLearningAgent(state_size=6, action_size=3)
-    episodes = 1000
-
+def train_agent(game, agent, episodes):
+    total_reward = 0
     for e in range(episodes):
         state = game.reset()
         done = False
-        total_reward = 0
 
         while not done:
             action = agent.choose_action(state)
@@ -217,13 +212,62 @@ def main():
             state = next_state
             total_reward += reward
 
-        print(f"Episode {e + 1}/{episodes}, Total Reward: {total_reward}, Epsilon: {agent.epsilon:.2f}")
+    return total_reward / episodes  # Return average score
+
+
+def stochastic_grid_search():
+    # Define ranges for hyperparameters
+    learning_rate_options = [0.01, 0.05, 0.1, 0.5]
+    discount_factor_options = [0.7, 0.8, 0.9, 0.95]
+    epsilon_decay_options = [0.9, 0.95, 0.99]
+    epsilon_min_options = [0.01, 0.05, 0.1]
+
+    best_score = float('-inf')
+    best_params = None
+
+    for _ in range(10):  # Stochastic search over 10 random combinations
+        learning_rate = random.choice(learning_rate_options)
+        discount_factor = random.choice(discount_factor_options)
+        epsilon_decay = random.choice(epsilon_decay_options)
+        epsilon_min = random.choice(epsilon_min_options)
+
+        # Create the agent with random parameters
+        agent = QLearningAgent(state_size=6, action_size=3, learning_rate=learning_rate,
+                               discount_factor=discount_factor, epsilon_decay=epsilon_decay,
+                               epsilon_min=epsilon_min)
+
+        # Train the agent
+        game = SnakeGame(width=200, height=200, render=False)
+        avg_score = train_agent(game, agent, episodes=1000)
+
+        print(f"Tested Params: lr={learning_rate}, gamma={discount_factor}, epsilon_decay={epsilon_decay}, "
+              f"epsilon_min={epsilon_min} | Avg. Score: {avg_score}")
+
+        if avg_score > best_score:
+            best_score = avg_score
+            best_params = (learning_rate, discount_factor, epsilon_decay, epsilon_min)
+
+    print(f"\nBest Hyperparameters: {best_params} with Avg. Score: {best_score}")
+    return best_params
+
+
+def main():
+    best_params = stochastic_grid_search()
+
+    # Create the agent with the best hyperparameters
+    agent = QLearningAgent(state_size=6, action_size=3, learning_rate=best_params[0],
+                           discount_factor=best_params[1], epsilon_decay=best_params[2],
+                           epsilon_min=best_params[3])
+
+    # Train the agent using the best hyperparameters
+    game = SnakeGame(width=200, height=200, render=True)
+    train_agent(game, agent, episodes=3000)
 
     # Save the trained Q-table
     save_q_table(agent)
     print("Training complete.")
 
-    # Load Q-table and play
+    # Load Q-table and play the game
     print("Playing the game using the learned policy...")
     trained_q_table = load_q_table()
     agent.q_table = trained_q_table
@@ -231,9 +275,8 @@ def main():
     play_game(agent, game)
 
     # Quit Pygame after game has finished
-    pygame.quit()
+    # pygame.quit()
     print("Game over. Pygame quit.")
-
 
 
 if __name__ == "__main__":
