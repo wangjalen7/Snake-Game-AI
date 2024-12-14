@@ -1,11 +1,13 @@
 # snake_rl.py
-
+import os
 import pygame
 import random
 import numpy as np
 from collections import deque
 import tensorflow as tf
 from keras import layers, models
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Suppress TensorFlow warnings
 
 # Initialize Pygame
 pygame.init()
@@ -269,7 +271,7 @@ def build_dueling_dqn(state_size, action_size, learning_rate):
 
 
 class DQNAgent:
-    def __init__(self, state_size=11, action_size=3, capacity=100000):
+    def __init__(self, state_size=11, action_size=3, capacity=25000):
         self.state_size = state_size
         self.action_size = action_size
         self.memory = PrioritizedReplayBuffer(capacity)
@@ -278,7 +280,7 @@ class DQNAgent:
         self.epsilon_min = 0.01
         self.epsilon_decay = 0.995
         self.learning_rate = 0.0005
-        self.batch_size = 32
+        self.batch_size = 16
         self.train_start = 1000
         self.model = build_dueling_dqn(self.state_size, self.action_size, self.learning_rate)
         self.target_model = build_dueling_dqn(self.state_size, self.action_size, self.learning_rate)
@@ -366,7 +368,7 @@ def main():
     print("Starting training...")
     game = SnakeGameRL(width=200, height=200, render=False)
     agent = DQNAgent()
-    episodes = 500
+    episodes = 2000
     eval_interval = 100
     eval_episodes = 10
     best_eval_score = -float('inf')
@@ -374,7 +376,8 @@ def main():
     max_episode_steps = 1000
 
     for e in range(episodes):
-        print(f"Starting Episode {e+1}/{episodes}")
+        if e % 100 == 0:
+            print(f"Starting Episode {e+1}/{episodes}")
         state = game.reset()
         done = False
         episode_score = 0
@@ -407,7 +410,7 @@ def main():
             print(f"Episode {e+1}, Evaluation Average Score: {avg_eval_score:.2f}")
             if avg_eval_score > best_eval_score:
                 best_eval_score = avg_eval_score
-                agent.model.save('best_snake_model.h5')
+                agent.model.save(f'{episodes}_snake_model.h5', overwrite=True)
                 print(f"New best model saved with Avg Eval Score: {avg_eval_score:.2f}")
 
         if (e + 1) % 100 == 0:
