@@ -228,7 +228,7 @@ def main():
 
     # Load the trained model
     # model_path = 'snake_dqn_model.h5'  # Is for the old rl model
-    model_path = 'best_snake_model.h5'
+    model_path = '2000_snake_model.h5'
     try:
         agent.load_model(model_path)
     except Exception as e:
