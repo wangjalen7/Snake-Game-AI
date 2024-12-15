@@ -242,6 +242,9 @@ class Agent:
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
 
+    def save_model(self, filename):
+        self.model.save(filename)  # Save the model as .h5
+
 def train_agent():
     game = SnakeGameRL(render=True)
     agent = Agent()
@@ -263,6 +266,8 @@ def train_agent():
                 agent.update_target_model()
 
         print(f"Episode {e + 1}/{episodes}, Score: {score}, Epsilon: {agent.epsilon:.2f}")
+
+    agent.save_model("more_layers_snake_model.h5")  # Save the trained model
 
 if __name__ == "__main__":
     train_agent()
