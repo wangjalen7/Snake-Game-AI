@@ -114,7 +114,7 @@ class SnakeGame:
         self.snake.insert(0, new_head)
         if new_head == self.pellet:
             self.score += 1
-            reward = 100
+            reward = 10
             self.pellet = self.spawn_pellet()
         else:
             self.snake.pop()
@@ -251,6 +251,23 @@ def stochastic_grid_search():
     return best_params
 
 
+def test_agent(agent, game, games=100):
+    total_score = 0
+
+    for _ in range(games):
+        state = game.reset()
+        done = False
+        while not done:
+            action = agent.choose_action(state)
+            state, _, done, score = game.step(action)
+        total_score += score
+        print(f"Game finished with score: {score}")
+
+    average_score = total_score / games
+    print(f"Average score over {games} games: {average_score}")
+    return average_score
+
+
 def main():
     best_params = stochastic_grid_search()
 
@@ -260,23 +277,27 @@ def main():
                            epsilon_min=best_params[3])
 
     # Train the agent using the best hyperparameters
-    game = SnakeGame(width=200, height=200, render=True)
+    game = SnakeGame(width=200, height=200, render=False)
     train_agent(game, agent, episodes=3000)
 
     # Save the trained Q-table
     save_q_table(agent)
     print("Training complete.")
 
-    # Load Q-table and play the game
-    print("Playing the game using the learned policy...")
+    # Load Q-table and test the agent
+    print("Testing the agent for average performance...")
     trained_q_table = load_q_table()
     agent.q_table = trained_q_table
-    game.render_game = True
-    play_game(agent, game)
 
-    # Quit Pygame after game has finished
+    # Test the agent and calculate the average score
+    game.render_game = False
+    average_score = test_agent(agent, game, games=10)
+
+    print(f"Average score over 100 games: {average_score}")
+
+    # Quit Pygame after testing
     pygame.quit()
-    print("Game over. Pygame quit.")
+    print("Testing complete. Pygame quit.")
 
 
 if __name__ == "__main__":

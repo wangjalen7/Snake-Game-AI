@@ -3,7 +3,6 @@ import random
 import sys
 import numpy as np
 import tensorflow as tf
-import keras
 from collections import deque
 
 # Initialize Pygame
@@ -64,10 +63,6 @@ class SnakeGameRL:
         return self.get_state()
 
     def spawn_pellets(self, num_pellets=2):
-        """
-        Ensures that there are always 'num_pellets' pellets on the board.
-        Adds new pellets without removing existing ones.
-        """
         while len(self.pellets) < num_pellets:
             pellet = (
                 random.randint(0, self.GRID_WIDTH - 1),
@@ -184,81 +179,95 @@ class SnakeGameRL:
         self.clock.tick(15)  # Limit to 15 FPS
 
 class Agent:
-    def __init__(self, state_size, action_size):
-        self.state_size = state_size
-        self.action_size = action_size
-        self.model = None  # The model will be loaded later for inference
+    def __init__(self):
+        self.state_size = 11
+        self.action_size = 3  # [straight, right turn, left turn]
+        self.memory = deque(maxlen=100000)
+        self.gamma = 0.99  # Discount rate
+        self.epsilon = 1.0  # Exploration rate
+        self.epsilon_min = 0.01
+        self.epsilon_decay = 0.995
+        self.learning_rate = 0.001
+        self.model = self._build_model()
+        self.target_model = self._build_model()
+        self.update_target_model()
+        self.batch_size = 64
+        self.train_start = 1000  # Start training after some experiences
+        self.steps = 0  # Total steps taken
 
-    def load_model(self, model_path):
-        """Load the trained model for inference."""
-        try:
-            self.model = tf.keras.models.load_model(
-                model_path, 
-                custom_objects={
-                    "tf": tf,
-                    "mse": tf.keras.losses.MeanSquaredError(),  # Ensure that 'mse' is recognized correctly
-                    "Adam": tf.keras.optimizers.Adam  # Ensure the optimizer is loaded correctly
-                }
-            )
-            print(f"Model loaded successfully from {model_path}")
-        except Exception as e:
-            print(f"Error loading model: {e}")
-            raise
+    def _build_model(self):
+        model = tf.keras.Sequential([
+            tf.keras.layers.Dense(256, input_dim=self.state_size, activation='relu'),  # Increased layer size
+            tf.keras.layers.Dense(256, activation='relu'),  # Increased layer size
+            tf.keras.layers.Dense(128, activation='relu'),  # Added another layer
+            tf.keras.layers.Dense(self.action_size, activation='linear')
+        ])
+        model.compile(loss='mse', optimizer=tf.keras.optimizers.Adam(learning_rate=self.learning_rate))
+        return model
 
+    def update_target_model(self):
+        self.target_model.set_weights(self.model.get_weights())
 
     def act(self, state):
-        """Use the trained model to predict the best action."""
-        if self.model is None:
-            raise ValueError("Model has not been loaded. Use the 'load_model' method first.")
-        state = np.reshape(state, [1, self.state_size])
-        print(f"State shape: {state.shape}")
-        # keras.config.disable_traceback_filtering()
-        try:
-            action_values = self.model.predict(state, verbose=0)  # Predict action values
-            print(f"Action values: {action_values}")
-            return np.argmax(action_values[0])  # Choose the action with the highest Q-value
-        except Exception as e:
-            print(f"Error during prediction: {e}")
-            raise
+        if np.random.rand() <= self.epsilon:
+            return random.randrange(self.action_size)
+        act_values = self.model.predict(np.reshape(state, [1, self.state_size]))
+        return np.argmax(act_values[0])  # Returns action with highest Q-value
 
-def main():
-    # Initialize the game and agent
-    game = SnakeGameRL(width=200, height=200, render=True)  # Set render=True to visualize
-    agent = Agent(state_size=11, action_size=6)
+    def remember(self, state, action, reward, next_state, done):
+        self.memory.append((state, action, reward, next_state, done))
+        self.steps += 1
 
-    # Load the trained model
-    # model_path = 'snake_dqn_model.h5'  # Is for the old rl model
-    model_path = 'more_layers_snake_model.h5'
-    try:
-        agent.load_model(model_path)
-    except Exception as e:
-        print(f"Failed to load model: {e}")
-        return
+    def replay(self):
+        if len(self.memory) < self.train_start:
+            return None
+        minibatch = random.sample(self.memory, min(len(self.memory), self.batch_size))
 
-    # Run the game with the loaded model
-    total_episodes = 5  # Number of games to play
-    for episode in range(total_episodes):
+        states = np.array([sample[0] for sample in minibatch])
+        actions = np.array([sample[1] for sample in minibatch])
+        rewards = np.array([sample[2] for sample in minibatch])
+        next_states = np.array([sample[3] for sample in minibatch])
+        dones = np.array([sample[4] for sample in minibatch])
+
+        target = self.model.predict(states)
+        next_target = self.target_model.predict(next_states)
+
+        for i in range(len(minibatch)):
+            if dones[i]:
+                target[i][actions[i]] = rewards[i]
+            else:
+                target[i][actions[i]] = rewards[i] + self.gamma * np.amax(next_target[i])
+
+        self.model.fit(states, target, epochs=1, verbose=0)
+        if self.epsilon > self.epsilon_min:
+            self.epsilon *= self.epsilon_decay
+
+    def save_model(self, filename):
+        self.model.save(filename)  # Save the model as .h5
+
+def train_agent():
+    game = SnakeGameRL(render=True)
+    agent = Agent()
+    episodes = 2000  # Train over 1000 episodes
+
+    for e in range(episodes):
         state = game.reset()
+        total_reward = 0
         done = False
-        total_score = 0
 
-        print(f"Starting Episode {episode + 1}/{total_episodes}")
         while not done:
-            game.render()
-            action = agent.act(state)  # Get action from the model
+            action = agent.act(state)
             next_state, reward, done, score = game.step(action)
+            agent.remember(state, action, reward, next_state, done)
             state = next_state
-            total_score = score
+            agent.replay()
 
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    pygame.quit()
-                    sys.exit()
+            if done:
+                agent.update_target_model()
 
-        print(f"Episode {episode + 1}/{total_episodes} finished with Score: {total_score}")
+        print(f"Episode {e + 1}/{episodes}, Score: {score}, Epsilon: {agent.epsilon:.2f}")
 
-    pygame.quit()
-    print("Game over!")
+    agent.save_model("more_layers_snake_model.h5")  # Save the trained model
 
 if __name__ == "__main__":
-    main()
+    train_agent()
