@@ -219,7 +219,9 @@ def main():
         return
 
     # Run the game with the loaded model
-    total_episodes = 5  # Number of games to play
+    total_episodes = 30  # Number of games to play
+    avg_score = 0
+    count = 0
     for episode in range(total_episodes):
         state = game.reset()
         done = False
@@ -239,7 +241,10 @@ def main():
                     sys.exit()
 
         print(f"Episode {episode + 1}/{total_episodes} finished with Score: {total_score}")
-
+        if total_score > 0:
+            avg_score += score
+            count += 1
+    print("Average Score: ", avg_score)
     pygame.quit()
     print("Game over!")
 
