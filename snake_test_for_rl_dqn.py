@@ -5,6 +5,8 @@ import numpy as np
 import tensorflow as tf
 from collections import deque
 
+# Copied a lot of the boilerplate from the other files & used ChatGPT for comments again
+
 # Initialize Pygame
 pygame.init()
 
