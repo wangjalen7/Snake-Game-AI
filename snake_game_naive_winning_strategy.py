@@ -1,17 +1,17 @@
 import pygame
-import random
 import sys
-import heapq
+
 
 # Note: we used chatGPT to debug this file as well as generate comments so that other team members could
 # easily read through and know what was going on. As a result, some of the code is written by generative
 # AI.
 
+
 # Initialize Pygame
 pygame.init()
 
 # Game Constants
-CELL_SIZE = 20  # Cell size remains constant
+CELL_SIZE = 20  # Size of each cell in the grid
 
 # Colors
 WHITE = (255, 255, 255)
@@ -19,14 +19,12 @@ GRAY = (40, 40, 40)
 BLACK = (0, 0, 0)
 RED = (200, 0, 0)
 GREEN = (0, 180, 0)
-BLUE = (0, 0, 255)
 
 # Directions
 UP = 'UP'
 DOWN = 'DOWN'
 LEFT = 'LEFT'
 RIGHT = 'RIGHT'
-DIRECTIONS = [UP, DOWN, LEFT, RIGHT]
 DIRECTION_VECTORS = {
     UP: (0, -1),
     DOWN: (0, 1),
@@ -59,25 +57,26 @@ class SnakeGameAI:
         self.reset()
 
     def reset(self):
-        self.snake = [(self.GRID_WIDTH // 2, self.GRID_HEIGHT // 2)]
+        self.snake = [(self.GRID_WIDTH // 2, self.GRID_HEIGHT - 1)]
         self.score = 0
         self.speed = 10  # Game speed in frames per second
         self.pellets = []
-        self.spawn_pellets(2)  # Initially spawn two pellets
-        self.path = []
+        self.spawn_pellet()
+        self.direction = UP
+        self.up_moves = self.GRID_HEIGHT - 1
+        self.right_moves = 0
 
-    def spawn_pellets(self, num_pellets=2):
-        """
-        Ensures that there are always 'num_pellets' pellets on the board.
-        Adds new pellets without removing existing ones.
-        """
-        while len(self.pellets) < num_pellets:
+    def spawn_pellet(self):
+        """Randomly place a pellet on the grid."""
+        import random
+        while True:
             pellet = (
                 random.randint(0, self.GRID_WIDTH - 1),
                 random.randint(0, self.GRID_HEIGHT - 1)
             )
-            if pellet not in self.snake and pellet not in self.pellets:
-                self.pellets.append(pellet)
+            if pellet not in self.snake:
+                self.pellets = [pellet]
+                break
 
     def draw_cell(self, position, color):
         rect = pygame.Rect(
@@ -100,56 +99,13 @@ class SnakeGameAI:
         # Draw Snake
         for segment in self.snake:
             self.draw_cell(segment, GREEN)
-        # Draw Pellets
+        # Draw Pellet
         for pellet in self.pellets:
             self.draw_cell(pellet, RED)
         # Draw Score
         score_text = self.font.render(f"Score: {self.score}", True, WHITE)
         self.screen.blit(score_text, (5, 5))
         pygame.display.flip()
-
-    def manhattan_distance(self, a, b):
-        dx = min(abs(a[0] - b[0]), self.GRID_WIDTH - abs(a[0] - b[0]))
-        dy = min(abs(a[1] - b[1]), self.GRID_HEIGHT - abs(a[1] - b[1]))
-        return dx + dy
-
-    def get_neighbors(self, position):
-        neighbors = []
-        for direction in DIRECTIONS:
-            dx, dy = DIRECTION_VECTORS[direction]
-            new_x = (position[0] + dx) % self.GRID_WIDTH
-            new_y = (position[1] + dy) % self.GRID_HEIGHT
-            neighbors.append(((new_x, new_y), direction))
-        return neighbors
-
-    def a_star(self):
-        start = self.snake[0]
-        goals = self.pellets.copy()
-        obstacles = set(self.snake[1:])
-        open_set = []
-        # Push tuples of (estimated_total_cost, cost_so_far, current_position, path)
-        for goal in goals:
-            heapq.heappush(open_set, (self.manhattan_distance(start, goal), 0, start, []))
-        closed_set = set()
-
-        while open_set:
-            est_total_cost, cost_so_far, current_pos, path = heapq.heappop(open_set)
-
-            if current_pos in goals:
-                return path  # Found the path to a pellet
-
-            if current_pos in closed_set:
-                continue
-            closed_set.add(current_pos)
-
-            for neighbor_pos, direction in self.get_neighbors(current_pos):
-                if neighbor_pos in obstacles or neighbor_pos in closed_set:
-                    continue
-                new_cost = cost_so_far + 1
-                heuristic = min(self.manhattan_distance(neighbor_pos, goal) for goal in goals)
-                est_total = new_cost + heuristic
-                heapq.heappush(open_set, (est_total, new_cost, neighbor_pos, path + [direction]))
-        return None  # No path found
 
     def handle_events(self):
         # Event Handling
@@ -158,8 +114,8 @@ class SnakeGameAI:
                 pygame.quit()
                 sys.exit()
 
-    def move_snake(self, direction):
-        dx, dy = DIRECTION_VECTORS[direction]
+    def move_snake(self):
+        dx, dy = DIRECTION_VECTORS[self.direction]
         new_head = (
             (self.snake[0][0] + dx) % self.GRID_WIDTH,
             (self.snake[0][1] + dy) % self.GRID_HEIGHT
@@ -176,28 +132,29 @@ class SnakeGameAI:
         # Check for pellet collision
         if new_head in self.pellets:
             self.score += 1
-            self.pellets.remove(new_head)
-            self.spawn_pellets(2)  # Ensure there are always two pellets
+            self.spawn_pellet()
         else:
             self.snake.pop()  # Remove last segment
+
+    def update_direction(self):
+        """Update the direction based on the fixed strategy."""
+        if self.direction == UP and self.up_moves > 0:
+            self.up_moves -= 1
+        elif self.direction == UP and self.up_moves == 0:
+            self.direction = RIGHT
+            self.right_moves = 1
+        elif self.direction == RIGHT and self.right_moves > 0:
+            self.right_moves -= 1
+            if self.right_moves == 0:
+                self.direction = UP
+                self.up_moves = self.GRID_HEIGHT - 2
 
     def run(self):
         while True:
             self.clock.tick(self.speed)
             self.handle_events()
-
-            # Check if path is empty or invalid
-            if not self.path:
-                self.path = self.a_star()
-                if not self.path:
-                    # No path found; end the game
-                    print("No path to any pellet. Game Over!")
-                    pygame.quit()
-                    sys.exit()
-
-            # Get next move
-            direction = self.path.pop(0)
-            self.move_snake(direction)
+            self.update_direction()
+            self.move_snake()
             self.draw_elements()
 
 

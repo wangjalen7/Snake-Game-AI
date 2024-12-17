@@ -2,6 +2,9 @@ import pygame
 import random
 import sys
 
+# We used ChatGPT to generate the basic Snake game and then refactored the code a little bit to fine tune
+# the features we needed as well as make it easier to work with for the agents we were testing.
+
 # Initialize Pygame
 pygame.init()
 
@@ -150,7 +153,7 @@ class SnakeGame:
 
 
 def main():
-    # You can set the game board size here (width, height)
+    # You can set the game board size here (width, height) but remember cell size is 20
     game = SnakeGame(width=800, height=600)
     game.run()
 
