@@ -18,6 +18,7 @@ Train and test the Reinforcement Learning Agents (training is usually around 100
 - python snake_rl_dqn.py will train the DQN model (2 hidden layers), snake_dqn_model.h5 is the trained model, and snake_test_for_rl_dqn.py will test the model
 - python snake_rl_more_hidden_layers.py will train the DQN model with 3 hidden layers and more_layers_snake_model.h5 is the trained model
 - python snake_rl_ddqn.py will train the double DQN model, ddqn_snake_model.h5 is the trained model, and snake_test_for_rl_ddqn.py will test the model
+- python snake_rl_dueling.py will train the dueling DQN model. It will generate a model of the format [# of epochs]_epoch_snake_model, whihc can be run using snake_test_rl_dueling.py
 
 Visualize Training Results: After training, plots of scores, survival times, losses, and epsilon values will be displayed.
 
