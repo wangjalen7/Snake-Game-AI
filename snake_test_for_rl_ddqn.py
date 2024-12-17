@@ -211,7 +211,7 @@ def main():
     agent = Agent(state_size=11, action_size=6)
 
     # Load the trained model
-    model_path = 'ddqn_snake_model.h5'  # Replace with the path to your .h5 file
+    model_path = 'models/ddqn_snake_model.h5'  # Replace with the path to your .h5 file
     try:
         agent.load_model(model_path)
     except Exception as e:
