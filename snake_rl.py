@@ -9,6 +9,9 @@ from keras import layers, models
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Suppress TensorFlow warnings
 
+# Note: We used ChatGPT to debug a number of things in this file. Some of the code throughout the file is written by AI.
+
+
 # Initialize Pygame
 pygame.init()
 

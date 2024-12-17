@@ -5,6 +5,8 @@ import pickle
 
 # Initialize Pygame
 pygame.init()
+# Note: We used ChatGPT to debug a number of things in this file. Some of the code throughout the file is written by AI.
+
 
 CELL_SIZE = 20
 

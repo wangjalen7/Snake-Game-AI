@@ -6,6 +6,8 @@ import pickle  # To save and load the best snake
 # Initialize Pygame and set game settings
 pygame.init()
 
+# Note: We used ChatGPT to debug a number of things in this file. Some of the code throughout the file is written by AI.
+
 # Game settings
 width, height = 200, 200
 block_size = 20
