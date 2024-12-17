@@ -9,6 +9,9 @@ from keras import layers, models
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Suppress TensorFlow warnings
 
+# Note: We used ChatGPT to debug a number of things in this file. Some of the code throughout the file is written by AI.
+
+
 # Initialize Pygame
 pygame.init()
 
@@ -154,37 +157,36 @@ class SnakeGameRL:
         reward = 0
 
         if new_head in self.snake[1:]:
-            reward = -10
+            reward = -10  # Harsh penalty for collision
             done = True
             return self.get_state(), reward, done, self.score
 
         self.snake.insert(0, new_head)
         if new_head in self.pellets:
             self.score += 1
-            reward += 10
+            reward += 10  # High reward for eating a pellet
             self.pellets.remove(new_head)
             self.spawn_pellets(2)
             self.steps_since_last_pellet = 0
         else:
             self.snake.pop()
-            reward -= 0.01
+            reward -= 0.01  # Small penalty for every step taken without eating
 
         self.steps_since_last_pellet += 1
         # End episode if too long without eating
         if self.steps_since_last_pellet > (self.GRID_WIDTH * self.GRID_HEIGHT):
-            reward -= 5
+            reward -= 5  # Penalty for prolonged inactivity
             done = True
 
         new_distance = self.bfs_shortest_path_to_pellet()
         if new_distance < old_distance:
-            reward += 0.1
+            reward += 0.1  # Reward for moving closer to the pellet
         elif new_distance > old_distance:
-            reward -= 0.05
+            reward -= 0.05  # Penalty for moving farther from the pellet
 
-        reward += 0.001  # Small survival reward
+        reward += 0.001  # Small survival reward for staying alive
 
         return self.get_state(), reward, done, self.score
-
     def render(self):
         if not self.render_game:
             return
