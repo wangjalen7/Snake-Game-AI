@@ -6,6 +6,10 @@ import tensorflow as tf
 import tensorflow.keras.layers as layers
 from collections import deque
 
+# Note: we used chatGPT to debug this file as well as generate comments so that other team members could
+# easily read through and know what was going on. As a result, some of the code is written by generative
+# AI.
+
 # Initialize Pygame
 pygame.init()
 

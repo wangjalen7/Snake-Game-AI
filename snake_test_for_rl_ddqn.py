@@ -5,6 +5,10 @@ import numpy as np
 import tensorflow as tf
 from collections import deque
 
+# Note: we used chatGPT to debug this file as well as generate comments so that other team members could
+# easily read through and know what was going on. As a result, some of the code is written by generative
+# AI. A lot of this is also just boilerplate from other files.
+
 # Initialize Pygame
 pygame.init()
 
